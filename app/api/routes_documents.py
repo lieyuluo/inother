@@ -3,7 +3,7 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db_session
@@ -31,7 +31,7 @@ DBSession = Annotated[AsyncSession, Depends(get_db_session)]
 async def upload_document(
     file: Annotated[UploadFile, File(description="Document file (.txt or .md)")],
     session: DBSession,
-    title: str | None = None,
+    title: Annotated[str | None, Form()] = None,
 ) -> UploadResponse:
     """Upload and process a document.
 
