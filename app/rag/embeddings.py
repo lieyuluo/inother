@@ -129,7 +129,7 @@ class OpenAIEmbeddingProvider(BaseEmbeddingProvider):
     """Placeholder for OpenAI embedding provider.
 
     This is a placeholder for future implementation.
-    Phase 3 does not use this provider to avoid network calls.
+    v0.2 Phase 1 does not use this provider to avoid network calls.
 
     Future implementation will:
     - Use OpenAI API (text-embedding-ada-002 or similar)
@@ -155,13 +155,13 @@ class OpenAIEmbeddingProvider(BaseEmbeddingProvider):
     def embed(self, text: str) -> list[float]:
         """Generate embedding using OpenAI API.
 
-        NOT IMPLEMENTED in Phase 3.
+        NOT IMPLEMENTED in v0.2 Phase 1.
 
         Raises:
-            NotImplementedError: Always raises in Phase 3
+            NotImplementedError: Always raises in v0.2 Phase 1
         """
         raise NotImplementedError(
-            "OpenAIEmbeddingProvider is not implemented in Phase 3. "
+            "OpenAIEmbeddingProvider is not implemented in v0.2 Phase 1. "
             "Use FakeEmbeddingProvider for testing."
         )
 
@@ -174,16 +174,35 @@ class OpenAIEmbeddingProvider(BaseEmbeddingProvider):
         return self._dimension
 
 
-def get_embedding_provider(use_fake: bool = True) -> EmbeddingProvider:
+def get_embedding_provider(
+    provider_name: str = "fake",
+    dimension: int = 1536,
+    api_key: str | None = None,
+    model: str | None = None,
+) -> BaseEmbeddingProvider:
     """Get embedding provider based on configuration.
 
     Args:
-        use_fake: Whether to use fake provider (default True for Phase 3)
+        provider_name: Provider name ('fake' or 'openai').
+        dimension: Embedding dimension (used by fake provider).
+        api_key: API key for external providers.
+        model: Model name for external providers.
 
     Returns:
-        Embedding provider instance
+        Embedding provider instance.
+
+    Raises:
+        ValueError: If provider_name is not supported.
     """
-    if use_fake:
-        return FakeEmbeddingProvider()
-    # Future: return OpenAIEmbeddingProvider() when implemented
-    raise NotImplementedError("Real embedding provider not available in Phase 3")
+    if provider_name == "fake":
+        return FakeEmbeddingProvider(dimension=dimension)
+    elif provider_name == "openai":
+        return OpenAIEmbeddingProvider(
+            api_key=api_key,
+            model=model or "text-embedding-ada-002",
+        )
+    else:
+        raise ValueError(
+            f"Unsupported embedding provider: '{provider_name}'. "
+            f"Supported providers: 'fake', 'openai'."
+        )

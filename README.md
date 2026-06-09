@@ -1,21 +1,26 @@
 # Enterprise AI Agent
 
-企业级 AI Agent 后端服务 - 一个生产就绪的 FastAPI + React 应用。当前版本 v0.1。
+企业级 AI Agent 后端服务 - 一个生产就绪的 FastAPI + React 应用。当前版本 v0.2。
 
 ## 项目介绍
 
-Enterprise AI Agent 是一个企业级 AI Agent 应用，提供 AI 对话、文档管理和 RAG（检索增强生成）功能。v0.1 版本包含完整的后端 API 和基础 Web UI。
+Enterprise AI Agent 是一个企业级 AI Agent 应用，提供 AI 对话、文档管理和 RAG（检索增强生成）功能。v0.2 版本增强了 Provider 架构，支持通过配置选择 LLM/Embedding Provider，并在 PostgreSQL 环境下使用 pgvector 原生检索。
 
-## v0.1 功能清单
+## v0.2 功能清单
 
 - 健康检查 API
 - Chat 会话和消息管理
 - 文档上传、列表、删除
-- RAG 检索与问答（FakeEmbeddingProvider + FakeLLMProvider）
+- RAG 检索与问答
+- **LLM Provider 可通过配置选择（fake/openai 占位）**
+- **Embedding Provider 可通过配置选择（fake/openai 占位）**
+- **PostgreSQL 环境下 Retriever 使用 pgvector 原生 cosine distance 查询**
+- **SQLite 测试环境下 Retriever 使用 Python cosine fallback**
 - Citations 追踪
 - AuditLog 审计日志
 - 基础 Web UI
 - Docker Compose 一键部署
+- **datetime.utcnow() 已修复为 timezone-aware 写法**
 
 ## 技术栈
 
@@ -48,9 +53,17 @@ enterprise-ai-agent/
 │   ├── core/                   # 配置、日志、错误处理
 │   ├── db/                     # 数据库模型、Repository
 │   ├── llm/                    # LLM Provider
-│   ├── rag/                    # RAG 组件（Embedding、Retriever、Ingestion）
+│   │   ├── base.py             # BaseLLMProvider ABC
+│   │   ├── fake.py             # FakeLLMProvider
+│   │   ├── external.py         # OpenAILLMProvider 占位
+│   │   └── provider.py         # get_llm_provider 工厂函数
+│   ├── rag/                    # RAG 组件
+│   │   ├── embeddings.py       # Embedding Provider（含工厂函数）
+│   │   ├── retriever.py         # Retriever（pgvector + Python fallback）
+│   │   ├── chunking.py         # 文本切分
+│   │   └── loaders.py          # 文档加载
 │   ├── schemas/                # Pydantic Schema
-│   └── services/               # 业务逻辑
+│   │   └── services/               # 业务逻辑
 ├── frontend/                   # 前端应用
 │   ├── src/
 │   │   ├── api/client.ts       # API 客户端
@@ -75,18 +88,41 @@ enterprise-ai-agent/
 |--------|------|--------|
 | `APP_NAME` | 应用名称 | `enterprise-ai-agent` |
 | `APP_ENV` | 运行环境 | `development` |
-| `APP_VERSION` | 应用版本 | `0.1.0` |
+| `APP_VERSION` | 应用版本 | `0.2.0` |
 | `DATABASE_URL` | PostgreSQL 连接 URL | `postgresql+asyncpg://postgres:postgres@localhost:5432/enterprise_ai_agent` |
 | `REDIS_URL` | Redis 连接 URL | `redis://localhost:6379/0` |
 | `LOG_LEVEL` | 日志级别 | `INFO` |
 | `CORS_ORIGINS` | CORS 允许的源 | `["http://localhost:3000","http://localhost:5173","http://localhost:8000"]` |
 | `SECRET_KEY` | 安全密钥 | 需在生产环境更改 |
+| `LLM_PROVIDER` | LLM Provider 名称 | `fake` |
+| `OPENAI_API_KEY` | OpenAI API Key（v0.2+ 接入真实 LLM 时需要） | 空 |
+| `OPENAI_LLM_MODEL` | OpenAI LLM 模型 | `gpt-3.5-turbo` |
+| `EMBEDDING_PROVIDER` | Embedding Provider 名称 | `fake` |
+| `OPENAI_EMBEDDING_MODEL` | OpenAI Embedding 模型 | `text-embedding-ada-002` |
 | `RAG_CHUNK_SIZE` | 文本切分大小 | `800` |
 | `RAG_CHUNK_OVERLAP` | 切分重叠大小 | `100` |
 | `EMBEDDING_DIMENSION` | Embedding 维度 | `1536` |
 | `RAG_TOP_K` | RAG 检索返回的最大结果数 | `4` |
 | `RAG_SNIPPET_MAX_LENGTH` | Citation snippet 最大长度 | `300` |
 | `VITE_API_BASE_URL` | 前端 API 地址 | `http://localhost:8000` |
+
+### Provider 配置说明
+
+- **`LLM_PROVIDER=fake`**（默认）：使用 FakeLLMProvider，不访问网络，输出稳定。适用于开发和测试。
+- **`LLM_PROVIDER=openai`**：使用 OpenAILLMProvider 占位。当前版本仅抛出 NotImplementedError，不进行网络调用。未来版本将接入真实 OpenAI API。
+- **`EMBEDDING_PROVIDER=fake`**（默认）：使用 FakeEmbeddingProvider，基于 SHA-256 hash 的确定性向量，不访问网络。适用于开发和测试。
+- **`EMBEDDING_PROVIDER=openai`**：使用 OpenAIEmbeddingProvider 占位。当前版本仅抛出 NotImplementedError，不进行网络调用。未来版本将接入真实 OpenAI Embedding API。
+
+**注意**：真实 Provider（OpenAI）目前只是接口占位，不会进行任何网络调用。测试环境必须使用 fake provider。
+
+### Retriever 双路径策略
+
+Retriever 根据数据库类型自动选择检索路径：
+
+- **PostgreSQL + pgvector**：使用 pgvector 原生 `<=>` cosine distance 操作符进行向量检索，score = 1 - distance。性能优于 Python 计算。
+- **SQLite（测试环境）**：使用 Python 层 cosine similarity 计算。兼容 SQLite，不依赖 pgvector。
+
+数据库差异封装在 Retriever 内部，route/service/agent 层不感知数据库类型。
 
 ## GitHub Codespaces 使用说明
 
@@ -109,6 +145,25 @@ Codespaces 会自动转发以下端口：
 - **5173** - 前端 Web UI
 
 在 Codespaces 的 "Ports" 标签中查看转发 URL。
+
+### Codespaces pgvector 验证步骤
+
+1. 启动服务：
+   ```bash
+   cp .env.example .env
+   docker compose up -d postgres redis
+   uv run alembic upgrade head
+   uv run uvicorn app.main:app --host 0.0.0.0 --port 8000
+   ```
+2. 上传文档并创建 chat session
+3. 使用 psql 验证 embedding 存在：
+   ```bash
+   docker compose exec postgres psql -U postgres -d enterprise_ai_agent -c "SELECT COUNT(*) FROM document_chunks WHERE embedding IS NOT NULL;"
+   ```
+4. 使用 psql 执行 pgvector cosine distance 查询（从已有 chunk 取 embedding 作为 query vector）：
+   ```bash
+   docker compose exec postgres psql -U postgres -d enterprise_ai_agent -c "SELECT id, 1 - (embedding <=> (SELECT embedding FROM document_chunks LIMIT 1)) AS score FROM document_chunks WHERE embedding IS NOT NULL ORDER BY embedding <=> (SELECT embedding FROM document_chunks LIMIT 1) LIMIT 5;"
+   ```
 
 ## 后端启动方式
 
@@ -318,31 +373,30 @@ docker compose up -d --build
 curl http://localhost:8000/health
 ```
 
-## v0.1 已知限制
+## v0.2 已知限制
 
-- **Fake LLM**：当前使用 FakeLLMProvider，不访问真实 LLM API，输出为固定格式
-- **Fake Embedding**：当前使用 FakeEmbeddingProvider，基于 SHA-256 hash 的确定性向量，不是语义检索
+- **Fake LLM**：默认使用 FakeLLMProvider，不访问真实 LLM API，输出为固定格式
+- **Fake Embedding**：默认使用 FakeEmbeddingProvider，基于 SHA-256 hash 的确定性向量，不是语义检索
+- **OpenAI Provider 占位**：OpenAILLMProvider 和 OpenAIEmbeddingProvider 仅抛出 NotImplementedError，不进行网络调用
 - **无认证**：当前无用户认证系统，使用 demo user
 - **无权限**：当前无权限管理
 - **无 MCP**：未实现 Model Context Protocol
 - **无 Tool Calling**：未实现工具调用
 - **无 ReAct / Plan-and-Execute**：未实现复杂 Agent 架构
-- **非生产级 pgvector 检索**：当前 Retriever 使用 Python 层 cosine similarity，未使用 pgvector 近似最近邻搜索
 - **仅支持 .txt/.md**：不支持 PDF、DOCX 等文档格式
 - **无流式输出**：Chat API 不支持 SSE 流式响应
 
-## v0.2 建议方向
+## v0.3 建议方向
 
 1. 接入真实 LLM（如 OpenAI API）
 2. 接入真实 Embedding Provider
-3. 使用 pgvector 近似最近邻搜索优化检索
-4. 实现用户认证和授权
-5. 支持 PDF、DOCX 文档格式
-6. 实现 SSE 流式输出
-7. 实现 ReAct / Tool Calling
-8. 实现 MCP
-9. 实现多租户
-10. 实现 Admin Dashboard
+3. 实现用户认证和授权
+4. 支持 PDF、DOCX 文档格式
+5. 实现 SSE 流式输出
+6. 实现 ReAct / Tool Calling
+7. 实现 MCP
+8. 实现多租户
+9. 实现 Admin Dashboard
 
 ## 许可证
 

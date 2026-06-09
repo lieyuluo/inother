@@ -19,7 +19,7 @@ class Settings(BaseSettings):
     # Application
     app_name: str = "enterprise-ai-agent"
     app_env: str = "development"
-    app_version: str = "0.1.0"
+    app_version: str = "0.2.0"
 
     # Database
     database_url: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/enterprise_ai_agent"
@@ -35,6 +35,15 @@ class Settings(BaseSettings):
 
     # Security (for future phases)
     secret_key: str = "your-secret-key-change-in-production"
+
+    # LLM Provider Configuration
+    llm_provider: str = "fake"  # 'fake' or 'openai'
+    openai_api_key: str = ""
+    openai_llm_model: str = "gpt-3.5-turbo"
+
+    # Embedding Provider Configuration
+    embedding_provider: str = "fake"  # 'fake' or 'openai'
+    openai_embedding_model: str = "text-embedding-ada-002"
 
     # RAG Configuration
     rag_chunk_size: int = 800
@@ -61,6 +70,14 @@ class Settings(BaseSettings):
     def is_development(self) -> bool:
         """Check if running in development environment."""
         return self.app_env.lower() == "development"
+
+    def is_pgvector_available(self) -> bool:
+        """Check if PostgreSQL with pgvector is available (not SQLite).
+
+        Returns:
+            True if the database URL indicates PostgreSQL.
+        """
+        return "postgresql" in self.database_url.lower()
 
 
 @lru_cache

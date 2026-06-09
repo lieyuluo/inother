@@ -1,9 +1,17 @@
-"""RAG retriever for searching relevant document chunks."""
+"""RAG retriever for searching relevant document chunks.
+
+Supports two backends:
+- PostgreSQL with pgvector: uses native cosine distance for vector similarity
+- SQLite (testing): uses Python-level cosine similarity computation
+
+The backend is automatically detected based on the database engine.
+Database-specific logic is encapsulated within this class.
+"""
 
 import math
 from dataclasses import dataclass
 
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
@@ -30,7 +38,7 @@ class Retriever:
     - PostgreSQL with pgvector: uses cosine distance for vector similarity
     - SQLite (testing): uses Python-level cosine similarity computation
 
-    The backend is automatically detected based on the database engine.
+    The backend is automatically detected based on the database URL in settings.
     Database-specific logic is encapsulated within this class.
     """
 
@@ -56,6 +64,7 @@ class Retriever:
         )
         self.top_k = top_k or settings.rag_top_k
         self.snippet_max_length = snippet_max_length or settings.rag_snippet_max_length
+        self._use_pgvector = settings.is_pgvector_available()
 
     async def similarity_search(self, query: str) -> list[RetrievalResult]:
         """Search for document chunks similar to the query.
@@ -70,6 +79,81 @@ class Retriever:
         # Generate query embedding
         query_embedding = self.embedding_provider.embed(query)
 
+        if self._use_pgvector:
+            return await self._pgvector_search(query_embedding)
+        else:
+            return await self._python_cosine_search(query_embedding)
+
+    async def _pgvector_search(self, query_embedding: list[float]) -> list[RetrievalResult]:
+        """Search using pgvector native cosine distance query.
+
+        Uses PostgreSQL pgvector operator '<=>' for cosine distance.
+        Score is converted to similarity: score = 1 - distance.
+
+        Args:
+            query_embedding: Query embedding vector.
+
+        Returns:
+            List of RetrievalResult sorted by score descending.
+        """
+        # Format embedding as string for pgvector
+        embedding_str = "[" + ",".join(str(v) for v in query_embedding) + "]"
+
+        # Use raw SQL for pgvector cosine distance query
+        # <=> is the cosine distance operator in pgvector
+        query_sql = text("""
+            SELECT
+                dc.id AS chunk_id,
+                dc.document_id,
+                d.title AS document_title,
+                dc.chunk_index,
+                dc.content,
+                1 - (dc.embedding <=> :query_embedding::vector) AS score
+            FROM document_chunks dc
+            JOIN documents d ON dc.document_id = d.id
+            WHERE d.status = 'ready'
+              AND dc.embedding IS NOT NULL
+            ORDER BY dc.embedding <=> :query_embedding::vector
+            LIMIT :limit
+        """)
+
+        result = await self.session.execute(
+            query_sql,
+            {"query_embedding": embedding_str, "limit": self.top_k},
+        )
+        rows = result.all()
+
+        results: list[RetrievalResult] = []
+        for row in rows:
+            content = str(row.content)
+            if len(content) > self.snippet_max_length:
+                content = content[: self.snippet_max_length]
+
+            results.append(
+                RetrievalResult(
+                    chunk_id=str(row.chunk_id),
+                    document_id=str(row.document_id),
+                    document_title=str(row.document_title),
+                    chunk_index=int(row.chunk_index),
+                    content=content,
+                    score=float(row.score),
+                )
+            )
+
+        return results
+
+    async def _python_cosine_search(self, query_embedding: list[float]) -> list[RetrievalResult]:
+        """Search using Python-level cosine similarity.
+
+        This is the fallback path for SQLite and other databases
+        that don't support pgvector.
+
+        Args:
+            query_embedding: Query embedding vector.
+
+        Returns:
+            List of RetrievalResult sorted by score descending.
+        """
         # Fetch all chunks from ready documents
         chunks = await self._fetch_ready_chunks()
 

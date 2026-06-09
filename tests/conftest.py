@@ -1,5 +1,6 @@
 """Test fixtures and configuration."""
 
+import os
 from collections.abc import AsyncGenerator, Generator
 from uuid import uuid4
 
@@ -21,6 +22,11 @@ from app.db.repositories import (
 )
 from app.db.session import get_db_session
 from app.main import app
+
+# Ensure test environment uses SQLite (not PostgreSQL/pgvector)
+os.environ["DATABASE_URL"] = "sqlite+aiosqlite:///test.db"
+os.environ["LLM_PROVIDER"] = "fake"
+os.environ["EMBEDDING_PROVIDER"] = "fake"
 
 
 @pytest_asyncio.fixture

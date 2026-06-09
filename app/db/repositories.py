@@ -1,6 +1,6 @@
 """Database repository layer for data access operations."""
 
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID, uuid4
 
@@ -112,7 +112,7 @@ class ChatSessionRepository:
             session.is_active = is_active
         if metadata is not None:
             session.meta = metadata
-        session.updated_at = datetime.utcnow()
+        session.updated_at = datetime.now(UTC)
         await self.session.flush()
         return session
 
@@ -273,7 +273,7 @@ class DocumentRepository:
             Updated document
         """
         document.status = status
-        document.updated_at = datetime.utcnow()
+        document.updated_at = datetime.now(UTC)
         await self.session.flush()
         return document
 

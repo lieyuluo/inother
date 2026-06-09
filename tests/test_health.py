@@ -27,7 +27,7 @@ class TestHealthEndpoints:
         """Test that GET /health returns version."""
         response = client.get("/health")
         data = response.json()
-        assert data["version"] == "0.1.0"
+        assert data["version"] == "0.2.0"
 
     def test_health_ready_returns_200(self, client: TestClient) -> None:
         """Test that GET /health/ready returns 200 status code."""
@@ -71,4 +71,4 @@ class TestAppLoadable:
         """Test that the app has the correct version."""
         from app.main import app
 
-        assert app.version == "0.1.0"
+        assert app.version == "0.2.0"

@@ -5,8 +5,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.agents.schemas import Citation, RAGAgentResult
 from app.core.config import get_settings
 from app.llm.base import BaseLLMProvider
-from app.llm.fake import FakeLLMProvider
-from app.rag.embeddings import EmbeddingProvider, FakeEmbeddingProvider
+from app.llm.provider import get_llm_provider
+from app.rag.embeddings import EmbeddingProvider, get_embedding_provider
 from app.rag.retriever import Retriever
 
 
@@ -33,16 +33,19 @@ class RAGAgent:
 
         Args:
             session: Async database session.
-            embedding_provider: Embedding provider (default: FakeEmbeddingProvider).
-            llm_provider: LLM provider (default: FakeLLMProvider).
+            embedding_provider: Embedding provider (default: from config).
+            llm_provider: LLM provider (default: from config).
             top_k: Number of retrieval results (default: from config).
             snippet_max_length: Max snippet length (default: from config).
         """
         settings = get_settings()
-        self.embedding_provider = embedding_provider or FakeEmbeddingProvider(
-            dimension=settings.embedding_dimension
+        self.embedding_provider = embedding_provider or get_embedding_provider(
+            provider_name=settings.embedding_provider,
+            dimension=settings.embedding_dimension,
+            api_key=settings.openai_api_key or None,
+            model=settings.openai_embedding_model,
         )
-        self.llm_provider = llm_provider or FakeLLMProvider()
+        self.llm_provider = llm_provider or get_llm_provider(settings)
         self.retriever = Retriever(
             session=session,
             embedding_provider=self.embedding_provider,

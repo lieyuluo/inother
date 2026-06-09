@@ -12,7 +12,7 @@ from app.db.repositories import (
     UserRepository,
 )
 from app.rag.chunking import TextChunker
-from app.rag.embeddings import FakeEmbeddingProvider
+from app.rag.embeddings import get_embedding_provider
 from app.rag.loaders import get_loader_for_extension, is_supported_extension
 from app.schemas.document import (
     DocumentChunkListResponse,
@@ -38,7 +38,12 @@ class DocumentService:
             chunk_size=settings.rag_chunk_size,
             chunk_overlap=settings.rag_chunk_overlap,
         )
-        self.embedding_provider = FakeEmbeddingProvider(dimension=settings.embedding_dimension)
+        self.embedding_provider = get_embedding_provider(
+            provider_name=settings.embedding_provider,
+            dimension=settings.embedding_dimension,
+            api_key=settings.openai_api_key or None,
+            model=settings.openai_embedding_model,
+        )
 
     async def upload_document(
         self,
