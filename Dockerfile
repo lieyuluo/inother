@@ -20,17 +20,20 @@ ENV PATH="/root/.local/bin:$PATH"
 # Set work directory
 WORKDIR /app
 
-# Copy project files
-COPY pyproject.toml .
+# Copy project metadata
+COPY pyproject.toml uv.lock README.md ./
 COPY .env.example .env.example
 
 # Install dependencies using uv
-RUN uv sync --no-dev
+RUN uv sync --no-dev --no-install-project
 
 # Copy application code
 COPY app ./app
 COPY alembic ./alembic
 COPY alembic.ini .
+
+# Install the project after source files are available
+RUN uv sync --no-dev
 
 # Create non-root user for security
 RUN useradd --create-home --shell /bin/bash appuser
