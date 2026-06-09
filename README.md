@@ -1,47 +1,75 @@
 # Enterprise AI Agent
 
-企业级 AI Agent 后端服务 - 一个生产就绪的 FastAPI 应用。
+企业级 AI Agent 后端服务 - 一个生产就绪的 FastAPI + React 应用。当前版本 v0.1。
 
 ## 项目介绍
 
-Enterprise AI Agent 是一个企业级 AI Agent 后端服务，旨在提供可靠的 AI 对话、文档管理和 RAG（检索增强生成）功能。当前为 v0.1 版本，Phase 4 已实现 RAG 检索与问答 Agent。
+Enterprise AI Agent 是一个企业级 AI Agent 应用，提供 AI 对话、文档管理和 RAG（检索增强生成）功能。v0.1 版本包含完整的后端 API 和基础 Web UI。
+
+## v0.1 功能清单
+
+- 健康检查 API
+- Chat 会话和消息管理
+- 文档上传、列表、删除
+- RAG 检索与问答（FakeEmbeddingProvider + FakeLLMProvider）
+- Citations 追踪
+- AuditLog 审计日志
+- 基础 Web UI
+- Docker Compose 一键部署
 
 ## 技术栈
 
-- **Python 3.12**
-- **FastAPI** - 现代、高性能的 Web 框架
-- **SQLAlchemy 2.x** - 异步 ORM
-- **Alembic** - 数据库迁移工具
-- **PostgreSQL** (pgvector/pgvector:pg16) - 带 pgvector 扩展的关系数据库
-- **Redis** - 缓存和会话存储
-- **pytest** - 测试框架
-- **pytest-asyncio** - 异步测试支持
-- **httpx** - HTTP 客户端
-- **ruff** - 快速的 Python linter 和 formatter
-- **mypy** - 静态类型检查
-- **uv** - 快速的 Python 包管理器
-- **Docker Compose** - 容器编排
-
-## GitHub Codespaces 启动方式
-
-**重要说明：本项目当前阶段推荐使用 GitHub Codespaces 验证，而不是本地 Docker。**
-
-### 创建 Codespace
-
-1. 在 GitHub 仓库页面，点击 "Code" 按钮
-2. 选择 "Codespaces" 标签
-3. 点击 "Create codespace on main"
-
-### Codespace 配置
-
-Codespace 会自动配置开发环境，包括：
+**后端：**
 - Python 3.12
-- Docker 和 Docker Compose
-- 所有必要的开发工具
+- FastAPI
+- SQLAlchemy 2.x（异步）
+- Alembic
+- PostgreSQL + pgvector
+- Redis
+- pytest
 
-## 环境变量说明
+**前端：**
+- Vite 6
+- React 18
+- TypeScript
+- ESLint
 
-项目使用以下环境变量（可在 `.env` 文件中配置）：
+**基础设施：**
+- Docker Compose
+- GitHub Actions CI
+
+## 项目目录
+
+```
+enterprise-ai-agent/
+├── app/                        # 后端应用
+│   ├── agents/                 # RAG Agent
+│   ├── api/                    # API 路由
+│   ├── core/                   # 配置、日志、错误处理
+│   ├── db/                     # 数据库模型、Repository
+│   ├── llm/                    # LLM Provider
+│   ├── rag/                    # RAG 组件（Embedding、Retriever、Ingestion）
+│   ├── schemas/                # Pydantic Schema
+│   └── services/               # 业务逻辑
+├── frontend/                   # 前端应用
+│   ├── src/
+│   │   ├── api/client.ts       # API 客户端
+│   │   ├── components/         # React 组件
+│   │   ├── App.tsx             # 主应用
+│   │   ├── types.ts            # TypeScript 类型
+│   │   └── styles.css          # 样式
+│   ├── Dockerfile              # 前端 Docker 镜像
+│   ├── nginx.conf              # Nginx 配置
+│   └── package.json
+├── tests/                      # 后端测试
+├── alembic/                    # 数据库迁移
+├── docker-compose.yml          # Docker Compose 配置
+├── Dockerfile                  # 后端 Docker 镜像
+├── pyproject.toml              # Python 项目配置
+└── .github/workflows/ci.yml    # GitHub Actions CI
+```
+
+## 环境变量
 
 | 变量名 | 说明 | 默认值 |
 |--------|------|--------|
@@ -51,17 +79,40 @@ Codespace 会自动配置开发环境，包括：
 | `DATABASE_URL` | PostgreSQL 连接 URL | `postgresql+asyncpg://postgres:postgres@localhost:5432/enterprise_ai_agent` |
 | `REDIS_URL` | Redis 连接 URL | `redis://localhost:6379/0` |
 | `LOG_LEVEL` | 日志级别 | `INFO` |
-| `CORS_ORIGINS` | CORS 允许的源 | `["http://localhost:3000","http://localhost:8000"]` |
+| `CORS_ORIGINS` | CORS 允许的源 | `["http://localhost:3000","http://localhost:5173","http://localhost:8000"]` |
 | `SECRET_KEY` | 安全密钥 | 需在生产环境更改 |
 | `RAG_CHUNK_SIZE` | 文本切分大小 | `800` |
 | `RAG_CHUNK_OVERLAP` | 切分重叠大小 | `100` |
 | `EMBEDDING_DIMENSION` | Embedding 维度 | `1536` |
 | `RAG_TOP_K` | RAG 检索返回的最大结果数 | `4` |
 | `RAG_SNIPPET_MAX_LENGTH` | Citation snippet 最大长度 | `300` |
+| `VITE_API_BASE_URL` | 前端 API 地址 | `http://localhost:8000` |
 
-## 快速开始
+## GitHub Codespaces 使用说明
 
-### 1. 复制环境变量配置
+**本项目推荐使用 GitHub Codespaces 进行开发和验证。**
+
+### 创建 Codespace
+
+1. 在 GitHub 仓库页面，点击 "Code" 按钮
+2. 选择 "Codespaces" 标签
+3. 点击 "Create codespace on main"
+
+### Codespace 配置
+
+Codespace 会自动配置开发环境，包括 Python 3.12、Node.js 20、Docker 和 Docker Compose。
+
+### 端口转发
+
+Codespaces 会自动转发以下端口：
+- **8000** - 后端 API
+- **5173** - 前端 Web UI
+
+在 Codespaces 的 "Ports" 标签中查看转发 URL。
+
+## 后端启动方式
+
+### 1. 复制环境变量
 
 ```bash
 cp .env.example .env
@@ -69,16 +120,8 @@ cp .env.example .env
 
 ### 2. 启动 PostgreSQL 和 Redis
 
-在 GitHub Codespaces 中：
-
 ```bash
 docker compose up -d postgres redis
-```
-
-等待服务健康检查完成：
-
-```bash
-docker compose ps
 ```
 
 ### 3. 执行数据库迁移
@@ -87,420 +130,219 @@ docker compose ps
 uv run alembic upgrade head
 ```
 
-### 4. 启动 FastAPI 服务
+### 4. 启动后端
 
 ```bash
 uv run uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```
 
-### 5. 验证服务
-
-在另一个终端或使用 curl：
+### 5. 验证
 
 ```bash
 curl http://localhost:8000/health
-curl http://localhost:8000/health/ready
-curl http://localhost:8000/health/live
 ```
 
-**注意**：如果 Codespaces 自动端口转发导致 `localhost` 不可访问，请使用 Codespaces 提供的 forwarded port URL（通常在 Codespace 的 "Ports" 标签中查看）。
+## 前端启动方式
 
-## Chat API 使用说明
-
-**重要说明**：
-- 当前 assistant response 使用 RAG Agent 生成，基于 FakeEmbeddingProvider 和 FakeLLMProvider。
-- 当前使用 FakeEmbeddingProvider（deterministic，不访问网络），不是生产级语义检索。
-- 当前使用 FakeLLMProvider（deterministic，不访问网络），不是真实 LLM。
-- 无相关文档时返回稳定 fallback：`未在知识库中找到足够信息。`
-
-### 创建聊天会话
+### 开发模式
 
 ```bash
-curl -X POST http://localhost:8000/api/chat/sessions \
-  -H "Content-Type: application/json" \
-  -d '{"title":"My Chat Session"}'
+cd frontend
+npm install
+npm run dev
 ```
 
-响应示例：
-```json
-{
-  "id": "550e8400-e29b-41d4-a716-446655440000",
-  "title": "My Chat Session",
-  "is_active": true,
-  "created_at": "2024-01-15T10:00:00Z",
-  "updated_at": null
-}
-```
+前端默认运行在 http://localhost:5173，API 请求代理到 http://localhost:8000。
 
-如果不提供 title，默认使用 "New Chat"：
+### 生产构建
 
 ```bash
-curl -X POST http://localhost:8000/api/chat/sessions \
-  -H "Content-Type: application/json" \
-  -d '{}'
+cd frontend
+npm run build
 ```
 
-### 列出聊天会话
+## Docker Compose 启动方式
+
+一键启动所有服务（API + Frontend + PostgreSQL + Redis）：
 
 ```bash
-curl http://localhost:8000/api/chat/sessions
+cp .env.example .env
+docker compose up -d --build
 ```
 
-### 获取单个会话
+查看服务状态：
 
 ```bash
-curl http://localhost:8000/api/chat/sessions/{session_id}
+docker compose ps
 ```
 
-### RAG 问答（发送消息）
+应看到 4 个服务：api、frontend、postgres、redis。
 
-先上传文档，然后发送问题：
+### 访问服务
+
+- **前端 Web UI**：http://localhost:5173
+- **后端 API**：http://localhost:8000
+- **API 文档**：http://localhost:8000/docs
+
+**Codespaces 中**：使用 Ports 标签中显示的转发 URL。
+
+## 数据库迁移
 
 ```bash
-# 1. 上传文档
-curl -X POST http://localhost:8000/api/documents/upload \
-  -F "file=@README.md"
-
-# 2. 创建 chat session
-curl -X POST http://localhost:8000/api/chat/sessions \
-  -H "Content-Type: application/json" \
-  -d '{"title":"RAG Test"}'
-
-# 3. 发送问题
-curl -X POST http://localhost:8000/api/chat/sessions/{session_id}/messages \
-  -H "Content-Type: application/json" \
-  -d '{"content":"这个项目支持哪些 API？"}'
-```
-
-响应示例：
-```json
-{
-  "user_message": {
-    "id": "...",
-    "session_id": "...",
-    "role": "user",
-    "content": "这个项目支持哪些 API？",
-    "token_count": null,
-    "created_at": "..."
-  },
-  "assistant_message": {
-    "id": "...",
-    "session_id": "...",
-    "role": "assistant",
-    "content": "根据知识库内容：...",
-    "token_count": null,
-    "created_at": "..."
-  },
-  "citations": [
-    {
-      "document_id": "...",
-      "document_title": "README.md",
-      "chunk_id": "...",
-      "chunk_index": 0,
-      "score": 0.85,
-      "snippet": "项目支持 Chat API 和 Document API..."
-    }
-  ],
-  "trace_id": "a1b2c3d4-e5f6-..."
-}
-```
-
-**Citation 说明**：
-- `document_id`：来源文档 ID
-- `document_title`：来源文档标题
-- `chunk_id`：来源 chunk ID
-- `chunk_index`：chunk 在文档中的索引
-- `score`：相似度分数
-- `snippet`：chunk 内容片段（最大 300 字符）
-
-**无相关文档时**：
-```json
-{
-  "user_message": {...},
-  "assistant_message": {
-    "content": "未在知识库中找到足够信息。"
-  },
-  "citations": [],
-  "trace_id": "..."
-}
-```
-
-### 获取消息列表
-
-```bash
-curl http://localhost:8000/api/chat/sessions/{session_id}/messages
-```
-
-消息按 `created_at` 升序返回。
-
-## Document API 使用说明
-
-**重要说明**：
-- 当前支持 `.txt` 和 `.md` 文件上传
-- 当前 Embedding 使用 FakeEmbeddingProvider（deterministic，不访问网络）
-- 删除策略为软删除（status 设为 'deleted'）
-- 只有 status = `ready` 的文档才会被 RAG 检索
-
-### 上传文档
-
-```bash
-curl -X POST http://localhost:8000/api/documents/upload \
-  -F "file=@README.md"
-```
-
-### 列出文档
-
-```bash
-curl http://localhost:8000/api/documents
-```
-
-### 获取单个文档
-
-```bash
-curl http://localhost:8000/api/documents/{document_id}
-```
-
-### 获取文档 Chunks
-
-```bash
-curl http://localhost:8000/api/documents/{document_id}/chunks
-```
-
-**注意**：API 不返回 embedding 向量，避免响应过大。
-
-### 删除文档
-
-```bash
-curl -X DELETE http://localhost:8000/api/documents/{document_id}
-```
-
-删除后返回 204 No Content。删除为软删除，文档 status 设为 'deleted'，默认不再出现在列表中，也不会被 RAG 检索。
-
-## pgvector Codespaces 验证步骤
-
-在 GitHub Codespaces 中验证 PostgreSQL + pgvector 向量检索：
-
-```bash
-# 1. 启动 postgres/redis
-docker compose up -d postgres redis
-
-# 2. 执行数据库迁移
+# 执行迁移
 uv run alembic upgrade head
 
-# 3. 启动 API
-uv run uvicorn app.main:app --host 0.0.0.0 --port 8000
+# 查看当前版本
+uv run alembic current
 
-# 4. 上传文档
-curl -X POST http://localhost:8000/api/documents/upload \
-  -F "file=@README.md"
-
-# 5. 创建 chat session 并发送问题
-curl -X POST http://localhost:8000/api/chat/sessions \
-  -H "Content-Type: application/json" \
-  -d '{"title":"RAG Test"}'
-
-curl -X POST http://localhost:8000/api/chat/sessions/{session_id}/messages \
-  -H "Content-Type: application/json" \
-  -d '{"content":"这个项目支持哪些 API？"}'
-
-# 确认 response 中包含 citations 和 trace_id
+# 创建新迁移
+uv run alembic revision --autogenerate -m "description"
 ```
 
-可选：用 psql 验证 pgvector：
-
-```bash
-# 验证 embedding 不为空
-docker compose exec postgres psql -U postgres -d enterprise_ai_agent \
-  -c "SELECT id, LEFT(embedding::text, 50) FROM document_chunks LIMIT 3;"
-
-# 验证 pgvector cosine distance 查询
-docker compose exec postgres psql -U postgres -d enterprise_ai_agent \
-  -c "SELECT chunk_index, embedding <=> '[0.1,0.2,...]'::vector AS distance FROM document_chunks LIMIT 5;"
-```
-
-## 运行测试
+## 后端测试命令
 
 ```bash
 # 运行所有测试
 uv run pytest -q
 
-# 运行详细测试
-uv run pytest -v
-
-# 运行特定测试文件
+# 运行特定测试
 uv run pytest tests/test_health.py
-uv run pytest tests/test_chat.py
-uv run pytest tests/test_rag_agent.py
-uv run pytest tests/test_retriever.py
-uv run pytest tests/test_llm.py
-uv run pytest tests/test_audit.py
-```
 
-## 代码质量检查
-
-### Lint 检查
-
-```bash
+# Lint 检查
 uv run ruff check .
-```
 
-### 格式检查
-
-```bash
+# 格式检查
 uv run ruff format --check .
-```
 
-### 类型检查
-
-```bash
+# 类型检查
 uv run mypy app
 ```
 
-### 自动格式化
+## 前端 Lint/Build 命令
 
 ```bash
-uv run ruff format .
+cd frontend
+
+# 安装依赖
+npm install
+
+# Lint 检查
+npm run lint
+
+# 生产构建
+npm run build
+
+# 开发服务器
+npm run dev
 ```
 
-## 项目结构
-
-```
-enterprise-ai-agent/
-├── app/
-│   ├── main.py              # FastAPI 应用入口
-│   ├── api/
-│   │   ├── __init__.py
-│   │   ├── routes_health.py # 健康检查路由
-│   │   ├── routes_chat.py   # Chat API 路由
-│   │   └── routes_documents.py # Document API 路由
-│   ├── agents/
-│   │   ├── __init__.py      # Agent 模块入口
-│   │   ├── rag_agent.py     # RAG Agent
-│   │   └── schemas.py       # Agent 数据结构
-│   ├── core/
-│   │   ├── config.py        # 配置管理
-│   │   ├── logging.py       # 日志配置
-│   │   ├── errors.py        # 错误处理
-│   │   └── lifespan.py      # 应用生命周期
-│   ├── db/
-│   │   ├── base.py          # SQLAlchemy Base
-│   │   ├── session.py       # 数据库会话
-│   │   ├── models.py        # 数据模型
-│   │   └── repositories.py  # 数据库 Repository 层
-│   ├── llm/
-│   │   ├── __init__.py      # LLM 模块入口
-│   │   ├── base.py          # LLM Provider 基类
-│   │   └── fake.py          # FakeLLMProvider
-│   ├── rag/
-│   │   ├── __init__.py      # RAG 模块入口
-│   │   ├── loaders.py       # 文档加载器
-│   │   ├── chunking.py      # 文本切分
-│   │   ├── embeddings.py    # Embedding Provider
-│   │   ├── ingestion.py     # 文档入库流程
-│   │   └── retriever.py     # RAG 检索器
-│   ├── schemas/
-│   │   ├── health.py        # 健康检查 Schema
-│   │   ├── chat.py          # Chat API Schema
-│   │   └── document.py      # Document API Schema
-│   └── services/
-│       ├── __init__.py
-│       ├── chat_service.py  # Chat 业务逻辑
-│       └── document_service.py # Document 业务逻辑
-├── tests/
-│   ├── conftest.py          # 测试配置
-│   ├── test_health.py       # 健康检查测试
-│   ├── test_chat.py         # Chat API 测试
-│   ├── test_documents.py    # Document API 测试
-│   ├── test_rag_agent.py    # RAG Agent 测试
-│   ├── test_retriever.py    # Retriever 测试
-│   ├── test_llm.py          # LLM Provider 测试
-│   └── test_audit.py        # AuditLog 测试
-├── alembic/
-│   ├── env.py               # Alembic 环境
-│   ├── script.py.mako       # 迁移模板
-│   └── versions/
-│       └── 001_initial.py   # 初始迁移
-├── .github/
-│   └── workflows/
-│       └── ci.yml           # GitHub Actions CI
-├── pyproject.toml           # 项目配置
-├── docker-compose.yml       # Docker Compose 配置
-├── Dockerfile               # Docker 镜像配置
-├── alembic.ini              # Alembic 配置
-├── .env.example             # 环境变量示例
-├── README.md                # 项目文档
-└── REPORT.md                # 阶段报告
-```
-
-## API 端点
+## API 简介
 
 ### 健康检查
 
-- `GET /health` - 基础健康检查
-- `GET /health/ready` - 就绪检查（包含数据库和 Redis 状态）
-- `GET /health/live` - 存活检查
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/health` | 基础健康检查 |
+| GET | `/health/ready` | 就绪检查 |
+| GET | `/health/live` | 存活检查 |
 
 ### Chat API
 
-- `POST /api/chat/sessions` - 创建聊天会话
-- `GET /api/chat/sessions` - 列出聊天会话
-- `GET /api/chat/sessions/{session_id}` - 获取单个会话
-- `GET /api/chat/sessions/{session_id}/messages` - 获取会话消息列表
-- `POST /api/chat/sessions/{session_id}/messages` - 发送消息（RAG 问答）
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| POST | `/api/chat/sessions` | 创建聊天会话 |
+| GET | `/api/chat/sessions` | 列出聊天会话 |
+| GET | `/api/chat/sessions/{session_id}` | 获取单个会话 |
+| GET | `/api/chat/sessions/{session_id}/messages` | 获取消息列表 |
+| POST | `/api/chat/sessions/{session_id}/messages` | 发送消息（RAG 问答） |
 
 ### Document API
 
-- `POST /api/documents/upload` - 上传文档
-- `GET /api/documents` - 列出文档
-- `GET /api/documents/{document_id}` - 获取单个文档
-- `GET /api/documents/{document_id}/chunks` - 获取文档 chunks
-- `DELETE /api/documents/{document_id}` - 删除文档（软删除）
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| POST | `/api/documents/upload` | 上传文档 |
+| GET | `/api/documents` | 列出文档 |
+| GET | `/api/documents/{document_id}` | 获取单个文档 |
+| GET | `/api/documents/{document_id}/chunks` | 获取文档 chunks |
+| DELETE | `/api/documents/{document_id}` | 删除文档 |
 
-### 响应示例
+## Web UI 使用步骤
 
-**GET /health**
-```json
-{
-  "status": "ok",
-  "service": "enterprise-ai-agent",
-  "version": "0.1.0"
-}
+1. 打开前端页面（http://localhost:5173 或 Codespaces 转发 URL）
+2. 页面顶部显示 API 健康状态
+3. 左侧边栏：
+   - **Upload Document**：上传 .txt 或 .md 文件
+   - **Documents**：查看已上传文档列表，支持删除
+   - **Sessions**：创建或选择聊天会话
+4. 右侧聊天区域：
+   - 选择会话后显示消息历史
+   - 输入问题并发送
+   - 查看 assistant 回答和 citations
+5. Citations 显示在聊天区域下方，包含 document_title、chunk_index、score、snippet
+
+## 手动端到端验收流程
+
+### 前置条件
+
+在 GitHub Codespaces 中：
+
+```bash
+cp .env.example .env
+docker compose up -d --build
 ```
 
-**GET /health/ready**
-```json
-{
-  "status": "ok",
-  "database": "not_checked",
-  "redis": "not_checked"
-}
+等待所有服务启动完成（约 30-60 秒）。
+
+### 验收步骤
+
+1. 打开 Codespaces frontend 转发端口 URL
+2. 确认页面顶部显示 "API Online"
+3. 在左侧 "Upload Document" 区域上传一个 .txt 或 .md 文件
+4. 确认文档列表出现该文档，status 显示为 "ready"
+5. 点击 "+ New" 按钮创建一个 chat session
+6. 点击新创建的 session
+7. 在聊天输入框中输入与上传文档相关的问题（如"这个项目支持哪些 API？"）
+8. 点击 Send 发送
+9. 确认页面显示 assistant answer
+10. 确认页面显示 citations（包含 document_title、chunk_index、score、snippet）
+11. 刷新页面（F5）
+12. 确认 session 列表仍存在
+13. 重新选择 session
+14. 确认消息历史仍存在
+15. 在文档列表中点击 "Delete" 删除文档
+16. 确认文档列表不再显示该文档
+
+### API 直接验证
+
+```bash
+curl http://localhost:8000/health
 ```
 
-**GET /health/live**
-```json
-{
-  "status": "ok"
-}
-```
+## v0.1 已知限制
 
-## 数据库模型
+- **Fake LLM**：当前使用 FakeLLMProvider，不访问真实 LLM API，输出为固定格式
+- **Fake Embedding**：当前使用 FakeEmbeddingProvider，基于 SHA-256 hash 的确定性向量，不是语义检索
+- **无认证**：当前无用户认证系统，使用 demo user
+- **无权限**：当前无权限管理
+- **无 MCP**：未实现 Model Context Protocol
+- **无 Tool Calling**：未实现工具调用
+- **无 ReAct / Plan-and-Execute**：未实现复杂 Agent 架构
+- **非生产级 pgvector 检索**：当前 Retriever 使用 Python 层 cosine similarity，未使用 pgvector 近似最近邻搜索
+- **仅支持 .txt/.md**：不支持 PDF、DOCX 等文档格式
+- **无流式输出**：Chat API 不支持 SSE 流式响应
 
-Phase 1 包含以下数据库模型：
+## v0.2 建议方向
 
-1. **User** - 用户模型（认证和所有权）
-2. **ChatSession** - 聊天会话模型
-3. **ChatMessage** - 聊天消息模型
-4. **Document** - 文档模型
-5. **DocumentChunk** - 文档分块模型（支持 pgvector）
-6. **AuditLog** - 审计日志模型
-
-所有模型使用 UUID 作为主键，核心表包含 `created_at`，可更新表包含 `updated_at`。
-
-## 本地 Docker 说明
-
-**本项目当前阶段不要求本地安装 Docker Desktop。**
-
-所有 Docker 相关验证在 GitHub Codespaces 中进行。如果您需要在本地运行 Docker 命令，请确保已安装 Docker 和 Docker Compose。
+1. 接入真实 LLM（如 OpenAI API）
+2. 接入真实 Embedding Provider
+3. 使用 pgvector 近似最近邻搜索优化检索
+4. 实现用户认证和授权
+5. 支持 PDF、DOCX 文档格式
+6. 实现 SSE 流式输出
+7. 实现 ReAct / Tool Calling
+8. 实现 MCP
+9. 实现多租户
+10. 实现 Admin Dashboard
 
 ## 许可证
 

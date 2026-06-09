@@ -47,6 +47,7 @@ exclude = [
     "__pycache__",
     "*.egg-info",
     "alembic",
+    "frontend",
 ]
 
 [tool.ruff.lint]
