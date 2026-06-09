@@ -36,6 +36,11 @@ class Settings(BaseSettings):
     # Security (for future phases)
     secret_key: str = "your-secret-key-change-in-production"
 
+    # RAG Configuration
+    rag_chunk_size: int = 800
+    rag_chunk_overlap: int = 100
+    embedding_dimension: int = 1536  # Match OpenAI embedding dimension
+
     def get_cors_origins(self) -> list[str]:
         """Parse CORS origins from string to list."""
         try:

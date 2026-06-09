@@ -10,6 +10,7 @@ from starlette.requests import Request
 from starlette.responses import Response
 
 from app.api.routes_chat import router as chat_router
+from app.api.routes_documents import router as documents_router
 from app.api.routes_health import router as health_router
 from app.core.config import get_settings
 from app.core.errors import AppException, app_exception_handler, http_exception_handler
@@ -72,6 +73,7 @@ def create_app() -> FastAPI:
     # Include routers
     app.include_router(health_router)
     app.include_router(chat_router)
+    app.include_router(documents_router)
 
     return app
 

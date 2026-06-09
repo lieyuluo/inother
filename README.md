@@ -4,7 +4,7 @@
 
 ## 项目介绍
 
-Enterprise AI Agent 是一个企业级 AI Agent 后端服务，旨在提供可靠的 AI 对话、文档管理和 RAG（检索增强生成）功能。当前为 v0.1 版本，Phase 2 已实现基础聊天会话系统。
+Enterprise AI Agent 是一个企业级 AI Agent 后端服务，旨在提供可靠的 AI 对话、文档管理和 RAG（检索增强生成）功能。当前为 v0.1 版本，Phase 3 已实现文档上传、解析、切分和 Embedding 入库。
 
 ## 技术栈
 
@@ -53,6 +53,9 @@ Codespace 会自动配置开发环境，包括：
 | `LOG_LEVEL` | 日志级别 | `INFO` |
 | `CORS_ORIGINS` | CORS 允许的源 | `["http://localhost:3000","http://localhost:8000"]` |
 | `SECRET_KEY` | 安全密钥 | 需在生产环境更改 |
+| `RAG_CHUNK_SIZE` | 文本切分大小 | `800` |
+| `RAG_CHUNK_OVERLAP` | 切分重叠大小 | `100` |
+| `EMBEDDING_DIMENSION` | Embedding 维度 | `1536` |
 
 ## 快速开始
 
@@ -222,6 +225,118 @@ curl http://localhost:8000/api/chat/sessions/{session_id}/messages
 
 消息按 `created_at` 升序返回。
 
+## Document API 使用说明
+
+**重要说明**：
+- 当前支持 `.txt` 和 `.md` 文件上传
+- 当前 Embedding 使用 FakeEmbeddingProvider（deterministic，不访问网络）
+- 当前阶段只做文档入库，不做 RAG 问答
+- 删除策略为软删除（status 设为 'deleted'）
+
+### 上传文档
+
+```bash
+curl -X POST http://localhost:8000/api/documents/upload \
+  -F "file=@README.md"
+```
+
+响应示例：
+```json
+{
+  "document": {
+    "id": "550e8400-e29b-41d4-a716-446655440000",
+    "title": "README.md",
+    "filename": "README.md",
+    "file_type": "md",
+    "file_size": 1234,
+    "status": "ready",
+    "created_at": "2024-01-15T10:00:00Z",
+    "updated_at": null
+  },
+  "chunks_count": 5
+}
+```
+
+上传 .txt 文件：
+```bash
+curl -X POST http://localhost:8000/api/documents/upload \
+  -F "file=@test.txt"
+```
+
+### 列出文档
+
+```bash
+curl http://localhost:8000/api/documents
+```
+
+响应示例：
+```json
+{
+  "documents": [
+    {
+      "id": "...",
+      "title": "README.md",
+      "filename": "README.md",
+      "file_type": "md",
+      "file_size": 1234,
+      "status": "ready",
+      "created_at": "...",
+      "updated_at": null
+    }
+  ],
+  "total": 1
+}
+```
+
+### 获取单个文档
+
+```bash
+curl http://localhost:8000/api/documents/{document_id}
+```
+
+### 获取文档 Chunks
+
+```bash
+curl http://localhost:8000/api/documents/{document_id}/chunks
+```
+
+响应示例：
+```json
+{
+  "chunks": [
+    {
+      "id": "...",
+      "document_id": "...",
+      "chunk_index": 0,
+      "content": "第一段文本内容...",
+      "token_count": 200,
+      "created_at": "...",
+      "updated_at": null
+    },
+    {
+      "id": "...",
+      "document_id": "...",
+      "chunk_index": 1,
+      "content": "第二段文本内容...",
+      "token_count": 180,
+      "created_at": "...",
+      "updated_at": null
+    }
+  ],
+  "total": 5
+}
+```
+
+**注意**：API 不返回 embedding 向量，避免响应过大。
+
+### 删除文档
+
+```bash
+curl -X DELETE http://localhost:8000/api/documents/{document_id}
+```
+
+删除后返回 204 No Content。删除为软删除，文档 status 设为 'deleted'，默认不再出现在列表中。
+
 ## 运行测试
 
 ```bash
@@ -271,7 +386,8 @@ enterprise-ai-agent/
 │   ├── api/
 │   │   ├── __init__.py
 │   │   ├── routes_health.py # 健康检查路由
-│   │   └── routes_chat.py   # Chat API 路由
+│   │   ├── routes_chat.py   # Chat API 路由
+│   │   └── routes_documents.py # Document API 路由
 │   ├── core/
 │   │   ├── config.py        # 配置管理
 │   │   ├── logging.py       # 日志配置
@@ -284,14 +400,23 @@ enterprise-ai-agent/
 │   │   └── repositories.py  # 数据库 Repository 层
 │   ├── schemas/
 │   │   ├── health.py        # 健康检查 Schema
-│   │   └── chat.py          # Chat API Schema
+│   │   ├── chat.py          # Chat API Schema
+│   │   └── document.py      # Document API Schema
+│   ├── rag/
+│   │   ├── __init__.py      # RAG 模块入口
+│   │   ├── loaders.py       # 文档加载器
+│   │   ├── chunking.py      # 文本切分
+│   │   ├── embeddings.py    # Embedding Provider
+│   │   └── ingestion.py     # 文档入库流程
 │   └── services/
 │       ├── __init__.py
-│       └── chat_service.py  # Chat 业务逻辑
+│       ├── chat_service.py  # Chat 业务逻辑
+│       └── document_service.py # Document 业务逻辑
 ├── tests/
 │   ├── conftest.py          # 测试配置
 │   ├── test_health.py       # 健康检查测试
-│   └── test_chat.py         # Chat API 测试
+│   ├── test_chat.py         # Chat API 测试
+│   └── test_documents.py    # Document API 测试
 ├── alembic/
 │   ├── env.py               # Alembic 环境
 │   ├── script.py.mako       # 迁移模板
@@ -324,6 +449,14 @@ enterprise-ai-agent/
 - `GET /api/chat/sessions/{session_id}` - 获取单个会话
 - `GET /api/chat/sessions/{session_id}/messages` - 获取会话消息列表
 - `POST /api/chat/sessions/{session_id}/messages` - 发送消息
+
+### Document API
+
+- `POST /api/documents/upload` - 上传文档
+- `GET /api/documents` - 列出文档
+- `GET /api/documents/{document_id}` - 获取单个文档
+- `GET /api/documents/{document_id}/chunks` - 获取文档 chunks
+- `DELETE /api/documents/{document_id}` - 删除文档（软删除）
 
 ### 响应示例
 
