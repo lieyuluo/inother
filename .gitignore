@@ -127,6 +127,7 @@ cython_debug/
 
 # uv
 .uv/
+.pip_local/
 
 # IDE
 .idea/

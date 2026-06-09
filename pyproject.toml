@@ -43,6 +43,7 @@ target-version = "py312"
 line-length = 100
 exclude = [
     ".git",
+    ".pip_local",
     ".venv",
     "__pycache__",
     "*.egg-info",
