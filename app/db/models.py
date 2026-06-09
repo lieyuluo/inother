@@ -5,12 +5,16 @@ from typing import Any
 from uuid import UUID
 
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, String, Text, func
+from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Index, Integer, String, Text, Uuid, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base, TimestampMixin, UUIDMixin
+
+uuid_type = Uuid(as_uuid=True).with_variant(PG_UUID(as_uuid=True), "postgresql")
+json_type = JSON().with_variant(JSONB, "postgresql")
+embedding_type = JSON().with_variant(Vector(1536), "postgresql")
 
 
 class User(Base, UUIDMixin, TimestampMixin):
@@ -43,7 +47,7 @@ class ChatSession(Base, UUIDMixin, TimestampMixin):
     __tablename__ = "chat_sessions"
 
     user_id: Mapped[UUID] = mapped_column(
-        PG_UUID(as_uuid=True),
+        uuid_type,
         ForeignKey("users.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
@@ -52,7 +56,7 @@ class ChatSession(Base, UUIDMixin, TimestampMixin):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     meta: Mapped[dict[str, Any] | None] = mapped_column(
         "metadata",
-        JSONB,
+        json_type,
         nullable=True,
     )
 
@@ -69,7 +73,7 @@ class ChatMessage(Base, UUIDMixin, TimestampMixin):
     __tablename__ = "chat_messages"
 
     session_id: Mapped[UUID] = mapped_column(
-        PG_UUID(as_uuid=True),
+        uuid_type,
         ForeignKey("chat_sessions.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
@@ -79,7 +83,7 @@ class ChatMessage(Base, UUIDMixin, TimestampMixin):
     token_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
     meta: Mapped[dict[str, Any] | None] = mapped_column(
         "metadata",
-        JSONB,
+        json_type,
         nullable=True,
     )
 
@@ -93,7 +97,7 @@ class Document(Base, UUIDMixin, TimestampMixin):
     __tablename__ = "documents"
 
     user_id: Mapped[UUID] = mapped_column(
-        PG_UUID(as_uuid=True),
+        uuid_type,
         ForeignKey("users.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
@@ -108,7 +112,7 @@ class Document(Base, UUIDMixin, TimestampMixin):
     )  # pending, processed, failed
     meta: Mapped[dict[str, Any] | None] = mapped_column(
         "metadata",
-        JSONB,
+        json_type,
         nullable=True,
     )
 
@@ -125,7 +129,7 @@ class DocumentChunk(Base, UUIDMixin, TimestampMixin):
     __tablename__ = "document_chunks"
 
     document_id: Mapped[UUID] = mapped_column(
-        PG_UUID(as_uuid=True),
+        uuid_type,
         ForeignKey("documents.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
@@ -133,12 +137,12 @@ class DocumentChunk(Base, UUIDMixin, TimestampMixin):
     chunk_index: Mapped[int] = mapped_column(Integer, nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
     embedding: Mapped[list[float] | None] = mapped_column(
-        Vector(1536), nullable=True
+        embedding_type, nullable=True
     )  # OpenAI embedding dimension
     token_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
     meta: Mapped[dict[str, Any] | None] = mapped_column(
         "metadata",
-        JSONB,
+        json_type,
         nullable=True,
     )
 
@@ -169,7 +173,7 @@ class AuditLog(Base, UUIDMixin):
     )
 
     user_id: Mapped[UUID | None] = mapped_column(
-        PG_UUID(as_uuid=True),
+        uuid_type,
         ForeignKey("users.id", ondelete="SET NULL"),
         nullable=True,
         index=True,
@@ -179,10 +183,10 @@ class AuditLog(Base, UUIDMixin):
         String(255), nullable=False
     )  # Can be user email or system identifier
     resource_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
-    resource_id: Mapped[UUID | None] = mapped_column(PG_UUID(as_uuid=True), nullable=True)
+    resource_id: Mapped[UUID | None] = mapped_column(uuid_type, nullable=True)
     meta: Mapped[dict[str, Any] | None] = mapped_column(
         "metadata",
-        JSONB,
+        json_type,
         nullable=True,
     )
 

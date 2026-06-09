@@ -4,11 +4,10 @@ from uuid import uuid4
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import ChatMessage, ChatSession
-from app.db.repositories import ChatMessageRepository, ChatSessionRepository, UserRepository
-from app.services.chat_service import ChatService
+from app.db.models import ChatSession
+from app.db.repositories import ChatMessageRepository, ChatSessionRepository
 
 
 class TestCreateSession:
@@ -46,7 +45,7 @@ class TestListSessions:
         """Test listing sessions successfully."""
         # Create a session first
         client.post("/api/chat/sessions", json={"title": "Test Session"})
-        
+
         response = client.get("/api/chat/sessions")
         assert response.status_code == 200
         data = response.json()
@@ -72,7 +71,7 @@ class TestGetSession:
         # Create a session
         create_response = client.post("/api/chat/sessions", json={"title": "Test"})
         session_id = create_response.json()["id"]
-        
+
         # Get the session
         response = client.get(f"/api/chat/sessions/{session_id}")
         assert response.status_code == 200
@@ -96,13 +95,13 @@ class TestGetMessages:
         # Create a session
         create_response = client.post("/api/chat/sessions", json={})
         session_id = create_response.json()["id"]
-        
+
         # Send a message
         client.post(
             f"/api/chat/sessions/{session_id}/messages",
             json={"content": "Hello"},
         )
-        
+
         # Get messages
         response = client.get(f"/api/chat/sessions/{session_id}/messages")
         assert response.status_code == 200
@@ -121,16 +120,16 @@ class TestGetMessages:
         # Create a session
         create_response = client.post("/api/chat/sessions", json={})
         session_id = create_response.json()["id"]
-        
+
         # Send multiple messages
         client.post(f"/api/chat/sessions/{session_id}/messages", json={"content": "First"})
         client.post(f"/api/chat/sessions/{session_id}/messages", json={"content": "Second"})
-        
+
         # Get messages
         response = client.get(f"/api/chat/sessions/{session_id}/messages")
         assert response.status_code == 200
         data = response.json()
-        
+
         # Check ordering - user messages should be in order
         user_messages = [m for m in data["messages"] if m["role"] == "user"]
         assert len(user_messages) >= 2
@@ -146,7 +145,7 @@ class TestSendMessage:
         # Create a session
         create_response = client.post("/api/chat/sessions", json={})
         session_id = create_response.json()["id"]
-        
+
         # Send message
         response = client.post(
             f"/api/chat/sessions/{session_id}/messages",
@@ -154,7 +153,7 @@ class TestSendMessage:
         )
         assert response.status_code == 201
         data = response.json()
-        
+
         assert "user_message" in data
         assert "assistant_message" in data
         assert data["user_message"]["role"] == "user"
@@ -167,17 +166,17 @@ class TestSendMessage:
         # Create a session
         create_response = client.post("/api/chat/sessions", json={})
         session_id = create_response.json()["id"]
-        
+
         # Send message
         client.post(f"/api/chat/sessions/{session_id}/messages", json={"content": "Test"})
-        
+
         # Get messages
         response = client.get(f"/api/chat/sessions/{session_id}/messages")
         data = response.json()
-        
+
         # Should have at least 2 messages (user + assistant)
         assert data["total"] >= 2
-        
+
         # Check roles
         roles = [m["role"] for m in data["messages"]]
         assert "user" in roles
@@ -197,7 +196,7 @@ class TestSendMessage:
         # Create a session
         create_response = client.post("/api/chat/sessions", json={})
         session_id = create_response.json()["id"]
-        
+
         # Send empty message
         response = client.post(
             f"/api/chat/sessions/{session_id}/messages",
@@ -210,7 +209,7 @@ class TestSendMessage:
         # Create a session
         create_response = client.post("/api/chat/sessions", json={})
         session_id = create_response.json()["id"]
-        
+
         # Send whitespace message
         response = client.post(
             f"/api/chat/sessions/{session_id}/messages",
@@ -227,7 +226,7 @@ class TestMockResponse:
         # Create a session
         create_response = client.post("/api/chat/sessions", json={})
         session_id = create_response.json()["id"]
-        
+
         # Send message
         response = client.post(
             f"/api/chat/sessions/{session_id}/messages",
@@ -235,7 +234,7 @@ class TestMockResponse:
         )
         assert response.status_code == 201
         data = response.json()
-        
+
         # Check mock response format
         assert data["assistant_message"]["content"] == "Echo: Test message"
 
@@ -243,15 +242,14 @@ class TestMockResponse:
 class TestRepositoryLayer:
     """Tests for repository layer operations."""
 
-    def test_create_session_repo(
+    @pytest.mark.asyncio
+    async def test_create_session_repo(
         self,
-        db_session: Session,
-        demo_user: ChatSession,
+        async_db_session: AsyncSession,
     ) -> None:
         """Test creating a session via repository."""
         from app.db.models import User
-        
-        # Create user first
+
         user = User(
             id=uuid4(),
             email="test@example.com",
@@ -260,53 +258,51 @@ class TestRepositoryLayer:
             is_active=True,
             is_superuser=False,
         )
-        db_session.add(user)
-        db_session.commit()
-        
-        repo = ChatSessionRepository(db_session)
-        session = repo.create(user_id=user.id, title="Repo Test")
-        
+        async_db_session.add(user)
+        await async_db_session.commit()
+
+        repo = ChatSessionRepository(async_db_session)
+        session = await repo.create(user_id=user.id, title="Repo Test")
+
         assert session.id is not None
         assert session.title == "Repo Test"
         assert session.user_id == user.id
 
-    def test_create_message_repo(
+    @pytest.mark.asyncio
+    async def test_create_message_repo(
         self,
-        db_session: Session,
+        async_db_session: AsyncSession,
         test_session: ChatSession,
     ) -> None:
         """Test creating a message via repository."""
-        repo = ChatMessageRepository(db_session)
-        message = repo.create(
+        repo = ChatMessageRepository(async_db_session)
+        message = await repo.create(
             session_id=test_session.id,
             role="user",
             content="Repo message",
         )
-        
+
         assert message.id is not None
         assert message.session_id == test_session.id
         assert message.role == "user"
         assert message.content == "Repo message"
 
-    def test_get_messages_ordered(
+    @pytest.mark.asyncio
+    async def test_get_messages_ordered(
         self,
-        db_session: Session,
+        async_db_session: AsyncSession,
         test_session: ChatSession,
     ) -> None:
         """Test that repository returns messages ordered by created_at."""
-        repo = ChatMessageRepository(db_session)
-        
-        # Create messages
-        repo.create(session_id=test_session.id, role="user", content="First")
-        repo.create(session_id=test_session.id, role="assistant", content="Echo: First")
-        repo.create(session_id=test_session.id, role="user", content="Second")
-        
-        db_session.commit()
-        
-        # Get messages
-        messages = repo.get_all_by_session(test_session.id)
-        
-        # Check ordering
+        repo = ChatMessageRepository(async_db_session)
+
+        await repo.create(session_id=test_session.id, role="user", content="First")
+        await repo.create(session_id=test_session.id, role="assistant", content="Echo: First")
+        await repo.create(session_id=test_session.id, role="user", content="Second")
+        await async_db_session.commit()
+
+        messages = await repo.get_all_by_session(test_session.id)
+
         user_messages = [m for m in messages if m.role == "user"]
         assert user_messages[0].content == "First"
         assert user_messages[1].content == "Second"

@@ -1,18 +1,13 @@
 """Test fixtures and configuration."""
 
-import asyncio
 from collections.abc import AsyncGenerator, Generator
-from typing import Any
 from uuid import uuid4
 
 import pytest
 import pytest_asyncio
 from fastapi.testclient import TestClient
-from httpx import AsyncClient, ASGITransport
-from sqlalchemy import create_engine
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-from sqlalchemy.orm import Session, sessionmaker
-from sqlalchemy.pool import StaticPool
+from sqlalchemy.pool import NullPool
 
 from app.db.base import Base
 from app.db.models import ChatMessage, ChatSession, User
@@ -21,66 +16,71 @@ from app.db.session import get_db_session
 from app.main import app
 
 
-# Sync engine for sync tests (using SQLite in-memory)
-SYNC_DATABASE_URL = "sqlite:///:memory:?check_same_thread=False"
-sync_engine = create_engine(
-    SYNC_DATABASE_URL,
-    connect_args={"check_same_thread": False},
-    poolclass=StaticPool,
-)
-SyncSessionFactory = sessionmaker(bind=sync_engine, autocommit=False, autoflush=False)
+@pytest_asyncio.fixture
+async def async_db_session(tmp_path) -> AsyncGenerator[AsyncSession, None]:
+    """Create an isolated async database session for testing."""
+    database_url = f"sqlite+aiosqlite:///{tmp_path / 'test.db'}"
+    engine = create_async_engine(database_url, poolclass=NullPool)
+    session_factory = async_sessionmaker(
+        engine,
+        class_=AsyncSession,
+        expire_on_commit=False,
+        autocommit=False,
+        autoflush=False,
+    )
 
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
 
-@pytest.fixture(scope="function")
-def sync_db() -> Generator[Session, None, None]:
-    """Create a sync database session for testing."""
-    # Create tables
-    Base.metadata.create_all(sync_engine)
-    session = SyncSessionFactory()
+    session = session_factory()
     try:
         yield session
-        session.commit()
+        await session.commit()
     except Exception:
-        session.rollback()
+        await session.rollback()
         raise
     finally:
-        session.close()
-        # Drop tables after test
-        Base.metadata.drop_all(sync_engine)
+        await session.close()
+        await engine.dispose()
 
 
 @pytest.fixture
-def client() -> TestClient:
+def client(async_db_session: AsyncSession) -> Generator[TestClient, None, None]:
     """Create a test client for the FastAPI application."""
-    return TestClient(app)
+    async def override_get_db_session() -> AsyncGenerator[AsyncSession, None]:
+        try:
+            yield async_db_session
+            await async_db_session.commit()
+        except Exception:
+            await async_db_session.rollback()
+            raise
+
+    app.dependency_overrides[get_db_session] = override_get_db_session
+    with TestClient(app) as test_client:
+        yield test_client
+    app.dependency_overrides.clear()
 
 
 @pytest.fixture
-def db_session(sync_db: Session) -> Session:
-    """Alias for sync_db."""
-    return sync_db
-
-
-@pytest.fixture
-def user_repo(sync_db: Session) -> UserRepository:
+def user_repo(async_db_session: AsyncSession) -> UserRepository:
     """Create a user repository."""
-    return UserRepository(sync_db)
+    return UserRepository(async_db_session)
 
 
 @pytest.fixture
-def session_repo(sync_db: Session) -> ChatSessionRepository:
+def session_repo(async_db_session: AsyncSession) -> ChatSessionRepository:
     """Create a chat session repository."""
-    return ChatSessionRepository(sync_db)
+    return ChatSessionRepository(async_db_session)
 
 
 @pytest.fixture
-def message_repo(sync_db: Session) -> ChatMessageRepository:
+def message_repo(async_db_session: AsyncSession) -> ChatMessageRepository:
     """Create a chat message repository."""
-    return ChatMessageRepository(sync_db)
+    return ChatMessageRepository(async_db_session)
 
 
-@pytest.fixture
-def demo_user(sync_db: Session) -> User:
+@pytest_asyncio.fixture
+async def demo_user(async_db_session: AsyncSession) -> User:
     """Create a demo user for testing."""
     user = User(
         id=uuid4(),
@@ -91,14 +91,14 @@ def demo_user(sync_db: Session) -> User:
         is_superuser=False,
         full_name="Demo User",
     )
-    sync_db.add(user)
-    sync_db.commit()
-    sync_db.refresh(user)
+    async_db_session.add(user)
+    await async_db_session.commit()
+    await async_db_session.refresh(user)
     return user
 
 
-@pytest.fixture
-def test_session(sync_db: Session, demo_user: User) -> ChatSession:
+@pytest_asyncio.fixture
+async def test_session(async_db_session: AsyncSession, demo_user: User) -> ChatSession:
     """Create a test chat session."""
     session = ChatSession(
         id=uuid4(),
@@ -106,14 +106,17 @@ def test_session(sync_db: Session, demo_user: User) -> ChatSession:
         title="Test Session",
         is_active=True,
     )
-    sync_db.add(session)
-    sync_db.commit()
-    sync_db.refresh(session)
+    async_db_session.add(session)
+    await async_db_session.commit()
+    await async_db_session.refresh(session)
     return session
 
 
-@pytest.fixture
-def test_messages(sync_db: Session, test_session: ChatSession) -> list[ChatMessage]:
+@pytest_asyncio.fixture
+async def test_messages(
+    async_db_session: AsyncSession,
+    test_session: ChatSession,
+) -> list[ChatMessage]:
     """Create test messages for a session."""
     messages = [
         ChatMessage(
@@ -130,8 +133,8 @@ def test_messages(sync_db: Session, test_session: ChatSession) -> list[ChatMessa
         ),
     ]
     for msg in messages:
-        sync_db.add(msg)
-    sync_db.commit()
+        async_db_session.add(msg)
+    await async_db_session.commit()
     for msg in messages:
-        sync_db.refresh(msg)
+        await async_db_session.refresh(msg)
     return messages

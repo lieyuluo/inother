@@ -3,7 +3,7 @@
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 # Request schemas
@@ -17,6 +17,14 @@ class SendMessageRequest(BaseModel):
     """Request schema for sending a message to a session."""
 
     content: str = Field(min_length=1, description="Message content, cannot be empty")
+
+    @field_validator("content")
+    @classmethod
+    def content_must_not_be_blank(cls, value: str) -> str:
+        """Reject messages that contain only whitespace."""
+        if not value.strip():
+            raise ValueError("Message content cannot be blank")
+        return value
 
 
 # Response schemas
