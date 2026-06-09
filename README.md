@@ -4,7 +4,7 @@
 
 ## 项目介绍
 
-Enterprise AI Agent 是一个企业级 AI Agent 应用，提供 AI 对话、文档管理、RAG（检索增强生成）、工具调用、ReAct Agent 和 Plan-and-Execute Agent 功能。v0.2 Phase 4 新增了 Plan-and-Execute Agent（确定性规划器）。
+Enterprise AI Agent 是一个企业级 AI Agent 应用，提供 AI 对话、文档管理、RAG（检索增强生成）、工具调用、ReAct Agent、Plan-and-Execute Agent 和 MCP 集成功能。v0.2 Phase 5 新增了 MCP Demo Integration。
 
 ## v0.2 功能清单
 
@@ -29,6 +29,9 @@ Enterprise AI Agent 是一个企业级 AI Agent 应用，提供 AI 对话、文�
 - **Plan-and-Execute Agent（确定性规划器，非生产级 LLM planner）**
 - **Chat API 支持 mode="plan_execute" 模式**
 - **前端 Plan & Execute Trace 展示**
+- **MCP Demo Integration（3 个 demo MCP tools）**
+- **MCP Tools 注册到 Tool Registry**
+- **ReAct / Plan-and-Execute 支持 MCP tools**
 - 基础 Web UI
 - Docker Compose 一键部署
 
@@ -302,8 +305,77 @@ curl -X POST http://localhost:8000/api/chat/sessions/{session_id}/messages \
 
 - **无真实 LLM 规划**：当前使用确定性规则
 - **非复杂多智能体**：单 Agent 顺序执行
-- **无 MCP**：未实现 Model Context Protocol
 - **max_steps 限制**：超过最大步数会截断
+
+## MCP Demo Integration 说明
+
+本阶段实现了 MCP (Model Context Protocol) 的 demo 集成，用于企业 Agent 平台内部工具标准化接入。
+
+### 重要说明
+
+- 当前为 **demo MCP integration**，不是生产级 MCP 实现
+- 使用 in-process demo server，不实现标准 MCP transport (stdio/HTTP)
+- 未来可替换为标准 MCP SDK
+- 所有 demo tools 数据 deterministic、可测试
+
+### MCP_DEMO_ENABLED 配置
+
+在 `.env` 中设置：
+
+```
+MCP_DEMO_ENABLED=true
+```
+
+默认启用。设为 `false` 则不注册 MCP tools。
+
+### MCP Demo Tools
+
+| Tool | 说明 | 输入 | 输出 |
+|------|------|------|------|
+| `mcp_echo` | Echo 回显 | `{"text": "hello"}` | `{"text": "hello", "source": "mcp"}` |
+| `mcp_get_business_metric` | 获取业务指标 | `{"metric": "revenue"}` | `{"metric": "revenue", "value": 1250000.0, "unit": "USD"}` |
+| `mcp_create_ticket` | 创建 demo 工单 | `{"title": "...", "description": "..."}` | `{"ticket_id": "DEMO-xxx", "title": "...", "status": "created"}` |
+
+支持的 metric 值：`revenue`、`active_users`、`tickets`
+
+### GET /api/tools 查看 MCP tools
+
+```bash
+curl http://localhost:8000/api/tools
+```
+
+返回的工具列表包含 `mcp_echo`、`mcp_get_business_metric`、`mcp_create_ticket`。
+
+### POST /api/tools/mcp_echo/invoke 示例
+
+```bash
+curl -X POST http://localhost:8000/api/tools/mcp_echo/invoke \
+  -H "Content-Type: application/json" \
+  -d '{"input": {"text": "hello MCP"}}'
+```
+
+### Chat /tool mcp_echo 示例
+
+```bash
+curl -X POST http://localhost:8000/api/chat/sessions/{session_id}/messages \
+  -H "Content-Type: application/json" \
+  -d '{"content": "/tool mcp_echo {\"text\":\"hello\"}"}'
+```
+
+### ReAct 调用 MCP tool 示例
+
+选择 ReAct 模式，输入 "查询 revenue 业务指标"，ReAct planner 会选择 `mcp_get_business_metric`。
+
+### Plan-and-Execute 调用 MCP tool 示例
+
+选择 Plan-Exec 模式，输入 "请先查看业务指标，再创建工单"，plan 会包含 `mcp_get_business_metric` + `mcp_create_ticket` + final。
+
+### MCP 当前限制
+
+- **In-process demo server**：不是标准 MCP transport
+- **非生产级 MCP transport**：未实现 stdio/HTTP 传输
+- **不访问外部系统**：所有数据为 demo 固定数据
+- **不实现标准完整 MCP 协议全部能力**
 
 ## Web UI Tool Panel 使用说明
 
@@ -344,6 +416,7 @@ enterprise-ai-agent/
 │   ├── api/                    # API 路由
 │   ├── core/                   # 配置、日志、错误处理
 │   ├── db/                     # 数据库模型、Repository
+│   ├── mcp/                    # MCP Demo Integration
 │   ├── llm/                    # LLM Provider
 │   ├── rag/                    # RAG 组件
 │   ├── schemas/                # Pydantic Schema
@@ -560,6 +633,12 @@ docker compose up -d --build
 23. 输入：`计算 1+2*3`，确认 calculator_tool + final 执行
 24. 输入无法规划的问题，确认 fallback 到 RAG
 25. 输入 `/tool calculator_tool {"expression":"1+2"}`，确认 /tool 优先级高于 Plan-Exec
+26. 在 Tool Panel 确认工具列表包含 mcp_echo、mcp_get_business_metric、mcp_create_ticket
+27. 在 Tool Panel 调用 mcp_echo
+28. 在 Tool Panel 调用 mcp_get_business_metric，metric=revenue
+29. 在 Chat 输入：`/tool mcp_echo {"text":"hello"}`
+30. 选择 ReAct mode，输入：`查询 revenue 业务指标`，确认调用 mcp_get_business_metric
+31. 选择 Plan-Exec mode，输入：`请先查看业务指标，再创建工单`，确认 plan 包含 MCP tools
 
 ## v0.2 已知限制
 
@@ -568,21 +647,21 @@ docker compose up -d --build
 - **OpenAI Provider 占位**：仅抛出 NotImplementedError
 - **无认证**：当前无用户认证系统
 - **无权限**：当前无权限管理
-- **无 MCP**：未实现 Model Context Protocol
 - **ReAct 是确定性规划器**：不是生产级 LLM planner，基于规则匹配
 - **Plan-and-Execute 是确定性规划器**：不是生产级 LLM planner，基于规则匹配
+- **MCP 是 demo 集成**：in-process demo server，非标准 MCP transport
 - **仅支持 .txt/.md**：不支持 PDF、DOCX 等文档格式
 - **无流式输出**：Chat API 不支持 SSE 流式响应
 
-## v0.3 建议方向
+## v0.3 / v1.0 建议方向
 
 1. 接入真实 LLM（如 OpenAI API）
 2. 实现 LLM 驱动的 ReAct planner（替换确定性规划器）
 3. 实现 LLM 驱动的 Plan-and-Execute planner
-4. 实现用户认证和授权
-5. 支持 PDF、DOCX 文档格式
-6. 实现 SSE 流式输出
-7. 实现 MCP
+4. 实现标准 MCP transport（stdio/HTTP）
+5. 实现用户认证和授权
+6. 支持 PDF、DOCX 文档格式
+7. 实现 SSE 流式输出
 8. 实现多租户
 9. 实现 Admin Dashboard
 

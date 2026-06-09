@@ -5,7 +5,9 @@ from uuid import UUID, uuid4
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import get_settings
 from app.db.repositories import AuditLogRepository
+from app.mcp.tool_adapter import create_mcp_tools
 from app.tools.base import BaseTool
 from app.tools.builtin import create_builtin_tools
 from app.tools.registry import ToolNotFoundError, ToolRegistry
@@ -29,6 +31,11 @@ class ToolService:
         # Register all builtin tools
         for tool in create_builtin_tools(session):
             self.registry.register(tool)
+        # Register MCP demo tools if enabled
+        settings = get_settings()
+        if settings.mcp_demo_enabled:
+            for tool in create_mcp_tools():
+                self.registry.register(tool)
 
     def list_tools(self) -> ToolListResponse:
         """List all registered tools.

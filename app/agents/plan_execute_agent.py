@@ -121,6 +121,52 @@ class DeterministicPlanPlanner:
             ]
             return _trim_plan(steps, max_steps)
 
+        # Rule 3.5: MCP - 先查看业务指标，再创建工单
+        mcp_metric_keywords = ["业务指标", "business metric", "revenue", "active_users", "active users"]
+        mcp_ticket_keywords = ["创建工单", "create ticket", "提交工单", "新建工单"]
+        if any(kw in q for kw in mcp_metric_keywords) and any(kw in q for kw in mcp_ticket_keywords):
+            steps = [
+                PlanStep(
+                    step_index=0,
+                    description="Get business metric",
+                    action_type="tool",
+                    tool_name="mcp_get_business_metric",
+                    tool_input={"metric": "revenue"},
+                ),
+                PlanStep(
+                    step_index=1,
+                    description="Create ticket",
+                    action_type="tool",
+                    tool_name="mcp_create_ticket",
+                    tool_input={"title": question, "description": question},
+                ),
+                PlanStep(
+                    step_index=2,
+                    description="Generate final answer",
+                    action_type="final",
+                ),
+            ]
+            return _trim_plan(steps, max_steps)
+
+        # Rule 3.6: MCP - 生成业务指标报告
+        mcp_report_keywords = ["生成业务指标报告", "业务指标报告", "business metric report", "生成指标报告"]
+        if any(kw in q for kw in mcp_report_keywords):
+            steps = [
+                PlanStep(
+                    step_index=0,
+                    description="Get business metric",
+                    action_type="tool",
+                    tool_name="mcp_get_business_metric",
+                    tool_input={"metric": "revenue"},
+                ),
+                PlanStep(
+                    step_index=1,
+                    description="Generate final answer",
+                    action_type="final",
+                ),
+            ]
+            return _trim_plan(steps, max_steps)
+
         # Rule 4: Single tool task → tool + final
         single_tool = _detect_single_tool(question, q)
         if single_tool is not None:
@@ -233,6 +279,32 @@ def _detect_single_tool(question: str, q: str) -> tuple[str, dict[str, object]] 
     ]
     if any(kw in q for kw in search_keywords):
         return ("search_documents_tool", {"query": question})
+
+    # MCP business metric
+    mcp_metric_keywords = [
+        "business metric", "业务指标", "查询指标", "指标查询",
+    ]
+    if any(kw in q for kw in mcp_metric_keywords):
+        metric = "revenue"
+        if "active_users" in q or "active users" in q or "用户" in q:
+            metric = "active_users"
+        elif "tickets" in q or "工单数" in q:
+            metric = "tickets"
+        return ("mcp_get_business_metric", {"metric": metric})
+
+    # MCP create ticket
+    mcp_ticket_kws = ["create ticket", "创建工单", "提交工单", "新建工单"]
+    if any(kw in q for kw in mcp_ticket_kws):
+        return ("mcp_create_ticket", {"title": question, "description": question})
+
+    # MCP echo
+    if q.startswith("mcp echo ") or q.startswith("mcp_echo "):
+        text = question.strip()
+        for prefix in ("mcp echo ", "mcp_echo "):
+            if text.lower().startswith(prefix):
+                text = text[len(prefix) :].strip()
+                break
+        return ("mcp_echo", {"text": text})
 
     return None
 

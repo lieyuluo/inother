@@ -52,6 +52,9 @@ class Settings(BaseSettings):
     rag_top_k: int = 4
     rag_snippet_max_length: int = 300
 
+    # MCP Configuration
+    mcp_demo_enabled: bool = True  # Enable demo MCP tools
+
     def get_cors_origins(self) -> list[str]:
         """Parse CORS origins from string to list."""
         try:

@@ -150,7 +150,61 @@ class DeterministicPlanner:
                 "Detected document search request",
             )
 
-        # Rule 5: No match → fallback to RAG
+        # Rule 5: MCP business metric
+        mcp_metric_keywords = [
+            "business metric",
+            "业务指标",
+            "revenue",
+            "active users",
+            "tickets",
+            "查询指标",
+            "指标查询",
+        ]
+        if any(kw in q for kw in mcp_metric_keywords):
+            # Try to extract specific metric
+            metric = "revenue"  # default
+            if "active_users" in q or "active users" in q or "用户" in q:
+                metric = "active_users"
+            elif "tickets" in q or "工单数" in q or "ticket" in q:
+                metric = "tickets"
+            elif "revenue" in q or "收入" in q or "营收" in q:
+                metric = "revenue"
+            return (
+                "mcp_get_business_metric",
+                {"metric": metric},
+                f"Detected business metric query: {metric}",
+            )
+
+        # Rule 6: MCP create ticket
+        mcp_ticket_keywords = [
+            "create ticket",
+            "创建工单",
+            "提交工单",
+            "新建工单",
+            "开工单",
+        ]
+        if any(kw in q for kw in mcp_ticket_keywords):
+            title = question.strip()
+            return (
+                "mcp_create_ticket",
+                {"title": title, "description": title},
+                "Detected ticket creation request",
+            )
+
+        # Rule 7: MCP echo
+        if q.startswith("mcp echo ") or q.startswith("mcp_echo "):
+            text = question.strip()
+            for prefix in ("mcp echo ", "mcp_echo "):
+                if text.lower().startswith(prefix):
+                    text = text[len(prefix) :].strip()
+                    break
+            return (
+                "mcp_echo",
+                {"text": text},
+                f"Detected MCP echo request: {text}",
+            )
+
+        # Rule 8: No match → fallback to RAG
         return (None, {}, "No matching tool found, falling back to RAG")
 
 
