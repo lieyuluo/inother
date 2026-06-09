@@ -46,7 +46,7 @@ class ChatSession(Base, UUIDMixin, TimestampMixin):
     )
     title: Mapped[str | None] = mapped_column(String(255), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
-    metadata: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    extra_metadata: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
 
     # Relationships
     user: Mapped["User"] = relationship("User", back_populates="chat_sessions")
@@ -66,7 +66,7 @@ class ChatMessage(Base, UUIDMixin, TimestampMixin):
     role: Mapped[str] = mapped_column(String(20), nullable=False)  # 'user', 'assistant', 'system'
     content: Mapped[str] = mapped_column(Text, nullable=False)
     token_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    metadata: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    extra_metadata: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
 
     # Relationships
     session: Mapped["ChatSession"] = relationship("ChatSession", back_populates="messages")
@@ -86,7 +86,7 @@ class Document(Base, UUIDMixin, TimestampMixin):
     file_size: Mapped[int] = mapped_column(Integer, nullable=False)
     content_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
     status: Mapped[str] = mapped_column(String(20), default="pending", nullable=False)  # pending, processed, failed
-    metadata: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    extra_metadata: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
 
     # Relationships
     user: Mapped["User"] = relationship("User", back_populates="documents")
@@ -107,7 +107,7 @@ class DocumentChunk(Base, UUIDMixin, TimestampMixin):
     content: Mapped[str] = mapped_column(Text, nullable=False)
     embedding: Mapped[list[float] | None] = mapped_column(Vector(1536), nullable=True)  # OpenAI embedding dimension
     token_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    metadata: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    extra_metadata: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
 
     # Relationships
     document: Mapped["Document"] = relationship("Document", back_populates="chunks")
@@ -137,7 +137,7 @@ class AuditLog(Base, UUIDMixin):
     actor: Mapped[str] = mapped_column(String(255), nullable=False)  # Can be user email or system identifier
     resource_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
     resource_id: Mapped[UUID | None] = mapped_column(PG_UUID(as_uuid=True), nullable=True)
-    metadata: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    extra_metadata: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
 
     # Relationships
     user: Mapped["User | None"] = relationship("User", back_populates="audit_logs")

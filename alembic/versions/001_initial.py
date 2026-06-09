@@ -46,7 +46,7 @@ def upgrade() -> None:
         sa.Column('user_id', postgresql.UUID(as_uuid=True), sa.ForeignKey('users.id', ondelete='CASCADE'), nullable=False),
         sa.Column('title', sa.String(255), nullable=True),
         sa.Column('is_active', sa.Boolean(), default=True, nullable=False),
-        sa.Column('metadata', postgresql.JSONB, nullable=True),
+        sa.Column('extra_metadata', postgresql.JSONB, nullable=True),
         sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
         sa.Column('updated_at', sa.DateTime(timezone=True), onupdate=sa.func.now(), nullable=True),
     )
@@ -60,7 +60,7 @@ def upgrade() -> None:
         sa.Column('role', sa.String(20), nullable=False),
         sa.Column('content', sa.Text(), nullable=False),
         sa.Column('token_count', sa.Integer(), nullable=True),
-        sa.Column('metadata', postgresql.JSONB, nullable=True),
+        sa.Column('extra_metadata', postgresql.JSONB, nullable=True),
         sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
         sa.Column('updated_at', sa.DateTime(timezone=True), onupdate=sa.func.now(), nullable=True),
     )
@@ -77,7 +77,7 @@ def upgrade() -> None:
         sa.Column('file_size', sa.Integer(), nullable=False),
         sa.Column('content_hash', sa.String(64), nullable=True),
         sa.Column('status', sa.String(20), default='pending', nullable=False),
-        sa.Column('metadata', postgresql.JSONB, nullable=True),
+        sa.Column('extra_metadata', postgresql.JSONB, nullable=True),
         sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
         sa.Column('updated_at', sa.DateTime(timezone=True), onupdate=sa.func.now(), nullable=True),
     )
@@ -92,7 +92,7 @@ def upgrade() -> None:
         sa.Column('content', sa.Text(), nullable=False),
         sa.Column('embedding', Vector(1536), nullable=True),
         sa.Column('token_count', sa.Integer(), nullable=True),
-        sa.Column('metadata', postgresql.JSONB, nullable=True),
+        sa.Column('extra_metadata', postgresql.JSONB, nullable=True),
         sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
         sa.Column('updated_at', sa.DateTime(timezone=True), onupdate=sa.func.now(), nullable=True),
     )
@@ -117,7 +117,7 @@ def upgrade() -> None:
         sa.Column('actor', sa.String(255), nullable=False),
         sa.Column('resource_type', sa.String(50), nullable=True),
         sa.Column('resource_id', postgresql.UUID(as_uuid=True), nullable=True),
-        sa.Column('metadata', postgresql.JSONB, nullable=True),
+        sa.Column('extra_metadata', postgresql.JSONB, nullable=True),
         sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
     )
     op.create_index('ix_audit_logs_user_id', 'audit_logs', ['user_id'])

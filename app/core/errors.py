@@ -57,24 +57,42 @@ class DatabaseError(AppException):
         )
 
 
-async def app_exception_handler(request: Request, exc: AppException) -> JSONResponse:
+async def app_exception_handler(request: Request, exc: Exception) -> JSONResponse:
     """Handle AppException and return JSON response."""
+    if isinstance(exc, AppException):
+        return JSONResponse(
+            status_code=exc.status_code,
+            content={
+                "error": exc.message,
+                "details": exc.details,
+            },
+        )
+    # Fallback for unexpected exceptions
     return JSONResponse(
-        status_code=exc.status_code,
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         content={
-            "error": exc.message,
-            "details": exc.details,
+            "error": "Internal server error",
+            "details": {"type": type(exc).__name__},
         },
     )
 
 
-async def http_exception_handler(request: Request, exc: HTTPException) -> JSONResponse:
+async def http_exception_handler(request: Request, exc: Exception) -> JSONResponse:
     """Handle HTTPException and return JSON response."""
+    if isinstance(exc, HTTPException):
+        return JSONResponse(
+            status_code=exc.status_code,
+            content={
+                "error": exc.detail,
+                "details": {},
+            },
+        )
+    # Fallback for unexpected exceptions
     return JSONResponse(
-        status_code=exc.status_code,
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         content={
-            "error": exc.detail,
-            "details": {},
+            "error": "Internal server error",
+            "details": {"type": type(exc).__name__},
         },
     )
 
