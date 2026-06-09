@@ -49,7 +49,9 @@ class ValidationError(AppException):
 class DatabaseError(AppException):
     """Database operation error exception."""
 
-    def __init__(self, message: str = "Database operation failed", details: dict[str, Any] | None = None) -> None:
+    def __init__(
+        self, message: str = "Database operation failed", details: dict[str, Any] | None = None
+    ) -> None:
         super().__init__(
             message=message,
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

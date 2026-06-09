@@ -72,6 +72,9 @@ known-first-party = ["app"]
 [tool.mypy]
 python_version = "3.12"
 strict = true
+plugins = ["pydantic.mypy"]
+disallow_untyped_decorators = false
+disallow_subclassing_any = false
 warn_return_any = true
 warn_unused_ignores = true
 disallow_untyped_defs = true
@@ -88,3 +91,13 @@ python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
 addopts = "-v --tb=short"
+[tool.hatch.build.targets.wheel]
+packages = ["app"]
+
+[dependency-groups]
+dev = [
+    "httpx>=0.28.1",
+    "mypy>=2.1.0",
+    "pytest>=9.0.3",
+    "ruff>=0.15.16",
+]

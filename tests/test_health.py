@@ -1,6 +1,5 @@
 """Tests for health check endpoints."""
 
-import pytest
 from fastapi.testclient import TestClient
 
 
@@ -59,14 +58,17 @@ class TestAppLoadable:
     def test_app_can_be_imported(self) -> None:
         """Test that the app module can be imported."""
         from app.main import app
+
         assert app is not None
 
     def test_app_has_correct_title(self) -> None:
         """Test that the app has the correct title."""
         from app.main import app
+
         assert app.title == "enterprise-ai-agent"
 
     def test_app_has_correct_version(self) -> None:
         """Test that the app has the correct version."""
         from app.main import app
+
         assert app.version == "0.1.0"

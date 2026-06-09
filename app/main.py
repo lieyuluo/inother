@@ -1,10 +1,13 @@
 """FastAPI main application entry point."""
 
+from collections.abc import AsyncGenerator, Awaitable, Callable
 from contextlib import asynccontextmanager
-from typing import AsyncGenerator
+from typing import cast
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.requests import Request
+from starlette.responses import Response
 
 from app.api.routes_health import router as health_router
 from app.core.config import get_settings
@@ -53,8 +56,17 @@ def create_app() -> FastAPI:
         )
 
     # Register exception handlers
-    app.add_exception_handler(AppException, app_exception_handler)
-    app.add_exception_handler(HTTPException, http_exception_handler)
+    exception_handler = cast(
+        Callable[[Request, Exception], Response | Awaitable[Response]],
+        app_exception_handler,
+    )
+    http_handler = cast(
+        Callable[[Request, Exception], Response | Awaitable[Response]],
+        http_exception_handler,
+    )
+
+    app.add_exception_handler(AppException, exception_handler)
+    app.add_exception_handler(HTTPException, http_handler)
 
     # Include routers
     app.include_router(health_router)
