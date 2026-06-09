@@ -507,3 +507,129 @@ button:disabled {
   color: var(--color-text-secondary);
   margin-top: 8px;
 }
+
+/* ReAct Steps */
+.react-steps {
+  margin: 8px 0;
+  padding: 8px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-surface);
+}
+
+.react-steps h4 {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  margin-bottom: 8px;
+  color: var(--color-text-secondary);
+}
+
+.react-step {
+  margin-bottom: 8px;
+  padding: 8px;
+  border-radius: 4px;
+  border: 1px solid var(--color-border);
+  font-size: 0.8125rem;
+}
+
+.react-step-success {
+  background: #f0fdf4;
+  border-color: #bbf7d0;
+}
+
+.react-step-error {
+  background: #fef2f2;
+  border-color: #fecaca;
+}
+
+.react-step-skipped {
+  background: #f8fafc;
+  border-color: #e2e8f0;
+}
+
+.react-step-header {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
+.step-index {
+  font-weight: 600;
+  font-size: 0.75rem;
+}
+
+.step-status {
+  font-weight: 500;
+  font-size: 0.6875rem;
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+
+.step-status-success {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.step-status-error {
+  background: #fef2f2;
+  color: #991b1b;
+}
+
+.step-status-skipped {
+  background: #f1f5f9;
+  color: #475569;
+}
+
+.step-tool {
+  font-family: monospace;
+  font-size: 0.6875rem;
+  background: #e0f2fe;
+  color: #0369a1;
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+
+.step-latency {
+  color: var(--color-text-secondary);
+  font-size: 0.6875rem;
+}
+
+.react-step-body {
+  padding-left: 4px;
+}
+
+.step-field {
+  margin-bottom: 2px;
+  line-height: 1.4;
+}
+
+.step-field strong {
+  font-size: 0.75rem;
+  color: var(--color-text-secondary);
+}
+
+.step-field code {
+  font-family: monospace;
+  font-size: 0.75rem;
+  background: var(--color-bg);
+  padding: 1px 4px;
+  border-radius: 3px;
+}
+
+/* Chat Mode Select */
+.chat-input-row {
+  display: flex;
+  gap: 8px;
+  align-items: flex-end;
+}
+
+.mode-select {
+  padding: 8px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  font-size: 0.8125rem;
+  background: var(--color-surface);
+  min-width: 80px;
+  height: 38px;
+}

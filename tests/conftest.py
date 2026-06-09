@@ -4,6 +4,12 @@ import os
 from collections.abc import AsyncGenerator, Generator
 from uuid import uuid4
 
+# Ensure test environment uses SQLite (not PostgreSQL/pgvector)
+# MUST be set before importing app modules that create engines at module level
+os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///test.db")
+os.environ.setdefault("LLM_PROVIDER", "fake")
+os.environ.setdefault("EMBEDDING_PROVIDER", "fake")
+
 import pytest
 import pytest_asyncio
 from fastapi.testclient import TestClient
@@ -22,11 +28,6 @@ from app.db.repositories import (
 )
 from app.db.session import get_db_session
 from app.main import app
-
-# Ensure test environment uses SQLite (not PostgreSQL/pgvector)
-os.environ["DATABASE_URL"] = "sqlite+aiosqlite:///test.db"
-os.environ["LLM_PROVIDER"] = "fake"
-os.environ["EMBEDDING_PROVIDER"] = "fake"
 
 
 @pytest_asyncio.fixture

@@ -41,11 +41,25 @@ export interface Citation {
   snippet: string
 }
 
+export interface ReActStep {
+  step_index: number
+  thought: string
+  action: string
+  action_input: Record<string, unknown>
+  observation: string
+  status: string
+  tool_name: string | null
+  latency_ms: number | null
+}
+
 export interface SendMessageResponse {
   user_message: Message
   assistant_message: Message
   citations: Citation[]
   trace_id: string
+  steps: ReActStep[] | null
+  tool_calls: Record<string, unknown>[] | null
+  mode: string | null
 }
 
 export interface SessionListResponse {

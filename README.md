@@ -4,7 +4,7 @@
 
 ## 项目介绍
 
-Enterprise AI Agent 是一个企业级 AI Agent 应用，提供 AI 对话、文档管理、RAG（检索增强生成）和工具调用功能。v0.2 Phase 2 新增了 Tool Registry 和基础 Tool Calling 能力。
+Enterprise AI Agent 是一个企业级 AI Agent 应用，提供 AI 对话、文档管理、RAG（检索增强生成）、工具调用和 ReAct Agent 功能。v0.2 Phase 3 新增了 ReAct Agent（确定性规划器）和 Chat mode 支持。
 
 ## v0.2 功能清单
 
@@ -23,6 +23,9 @@ Enterprise AI Agent 是一个企业级 AI Agent 应用，提供 AI 对话、文�
 - **Chat 中通过 /tool 命令调用工具**
 - **Tool API（GET /api/tools, POST /api/tools/{name}/invoke）**
 - **Web UI Tool Panel**
+- **ReAct Agent（确定性规划器，非生产级 LLM planner）**
+- **Chat API 支持 mode="react" 模式**
+- **前端 ReAct Steps 展示**
 - 基础 Web UI
 - Docker Compose 一键部署
 
@@ -103,7 +106,7 @@ curl -X POST http://localhost:8000/api/tools/calculator_tool/invoke \
 - 工具调用结果作为 assistant message 保存
 - 工具调用时 citations 为空
 - 普通问题仍走 RAG Agent，不受影响
-- 当前不支持 LLM 自动选择工具，ReAct 在下一 Phase
+- 支持 mode="react" 走 ReAct Agent 自动选择工具
 
 ### Calculator 安全限制
 
@@ -124,6 +127,101 @@ calculator_tool 使用 AST 白名单解析，确保安全：
 - action: `tool.invoke`
 - resource_type: `tool`
 - metadata 包含：trace_id、tool_name、input_summary、status、latency_ms、error（如有）
+
+## ReAct Agent 说明
+
+ReAct Agent 使用**确定性规划器（DeterministicPlanner）**进行工具选择，**不是**生产级 LLM planner。
+
+### 重要说明
+
+- 当前 ReAct planner 是 **deterministic（基于规则）**，不是基于 LLM 的自动规划
+- 规则稳定可测试，但不具备 LLM 的语义理解能力
+- 未来接入真实 LLM 后可替换为 LLM planner
+
+### Deterministic Planner 规则
+
+| 规则 | 匹配条件 | 选择工具 |
+|------|----------|----------|
+| 1a | 包含 "计算/calculate/算/compute" 关键词 | `calculator_tool` |
+| 1b | 包含 "what is" + 数字 | `calculator_tool` |
+| 2 | 以 "echo " 或 "回显 " 开头 | `echo_tool` |
+| 3 | 包含 "系统状态/system status/health" 等 | `get_system_status_tool` |
+| 4 | 包含 "搜索文档/search documents/知识库搜索" 等 | `search_documents_tool` |
+| 5 | 无匹配 | fallback 到 RAG |
+
+### Chat API mode 参数
+
+发送消息时可指定 `mode` 参数：
+
+```bash
+# RAG 模式（默认）
+curl -X POST http://localhost:8000/api/chat/sessions/{session_id}/messages \
+  -H "Content-Type: application/json" \
+  -d '{"content": "What is AI?"}'
+
+# RAG 模式（显式指定）
+curl -X POST http://localhost:8000/api/chat/sessions/{session_id}/messages \
+  -H "Content-Type: application/json" \
+  -d '{"content": "What is AI?", "mode": "rag"}'
+
+# ReAct 模式
+curl -X POST http://localhost:8000/api/chat/sessions/{session_id}/messages \
+  -H "Content-Type: application/json" \
+  -d '{"content": "计算 1+2*3", "mode": "react"}'
+```
+
+优先级：`/tool` 命令 > `mode="react"` > 默认 RAG
+
+### ReAct Response 示例
+
+```json
+{
+  "user_message": {"id": "...", "role": "user", "content": "计算 1+2*3"},
+  "assistant_message": {"id": "...", "role": "assistant", "content": "计算结果：1+2*3 = 7"},
+  "citations": [],
+  "trace_id": "abc123...",
+  "steps": [
+    {
+      "step_index": 0,
+      "thought": "Detected arithmetic expression: 1+2*3",
+      "action": "call_tool:calculator_tool",
+      "action_input": {"expression": "1+2*3"},
+      "observation": "{'result': 7, 'expression': '1+2*3'}",
+      "status": "success",
+      "tool_name": "calculator_tool",
+      "latency_ms": 1.2
+    }
+  ],
+  "tool_calls": [
+    {"tool_name": "calculator_tool", "status": "success", "trace_id": "...", "latency_ms": 1.2}
+  ],
+  "mode": "react"
+}
+```
+
+### ReAct AuditLog 说明
+
+每次 ReAct 执行写入 AuditLog：
+
+- action: `react.run`
+- resource_type: `react_session`
+- metadata 包含：trace_id、session_id、question、mode、steps_count、tool_calls_count、used_fallback、final_status
+
+注意：ReAct 调用工具时，ToolService 仍会写 `tool.invoke` AuditLog。
+
+### 前端 ReAct 模式使用方式
+
+1. 在聊天输入框上方选择模式：RAG 或 ReAct
+2. 选择 ReAct 模式后，发送消息将走 ReAct Agent
+3. 回复下方显示 ReAct Steps（Thought、Action、Observation、Status）
+4. 继续支持 `/tool` 手动命令（优先级高于 ReAct 模式）
+
+### ReAct 限制
+
+- **无真实 LLM 自动规划**：当前使用确定性规则，不是 LLM chain-of-thought
+- **无多步复杂任务**：当前单步工具调用，不支持多步推理链
+- **无 Plan-and-Execute**：未实现计划-执行模式
+- **无 MCP**：未实现 Model Context Protocol
 
 ## Web UI Tool Panel 使用说明
 
@@ -160,7 +258,7 @@ calculator_tool 使用 AST 白名单解析，确保安全：
 ```
 enterprise-ai-agent/
 ├── app/                        # 后端应用
-│   ├── agents/                 # RAG Agent
+│   ├── agents/                 # RAG Agent, ReAct Agent
 │   ├── api/                    # API 路由
 │   ├── core/                   # 配置、日志、错误处理
 │   ├── db/                     # 数据库模型、Repository
@@ -178,7 +276,8 @@ enterprise-ai-agent/
 │   ├── src/
 │   │   ├── api/client.ts       # API 客户端
 │   │   ├── components/         # React 组件
-│   │   │   └── ToolPanel.tsx   # 工具面板组件
+│   │   │   ├── ToolPanel.tsx   # 工具面板组件
+│   │   │   └── ReActSteps.tsx  # ReAct 步骤展示组件
 │   │   ├── App.tsx             # 主应用
 │   │   ├── types.ts            # TypeScript 类型
 │   │   └── styles.css          # 样式
@@ -309,7 +408,7 @@ docker compose ps
 | GET | `/api/chat/sessions` | 列出聊天会话 |
 | GET | `/api/chat/sessions/{session_id}` | 获取单个会话 |
 | GET | `/api/chat/sessions/{session_id}/messages` | 获取消息列表 |
-| POST | `/api/chat/sessions/{session_id}/messages` | 发送消息（RAG 问答或 /tool 调用） |
+| POST | `/api/chat/sessions/{session_id}/messages` | 发送消息（RAG 问答、/tool 调用或 ReAct 模式） |
 
 ### Document API
 
@@ -339,9 +438,10 @@ docker compose ps
    - **Sessions**：创建或选择聊天会话
 4. 右侧聊天区域：
    - 选择会话后显示消息历史
-   - 输入问题并发送（RAG 问答）
-   - 输入 `/tool <name> <json>` 调用工具
-   - 查看 assistant 回答和 citations
+   - 选择模式：RAG 或 ReAct
+   - 输入问题并发送（RAG 问答或 ReAct 工具选择）
+   - 输入 `/tool <name> <json>` 调用工具（优先级最高）
+   - 查看 assistant 回答、citations 和 ReAct Steps
 
 ## 手动端到端验收流程
 
@@ -364,6 +464,12 @@ docker compose up -d --build
 10. 在 Chat 输入框输入：`/tool calculator_tool {"expression":"1+2*3"}`
 11. 确认 assistant message 显示计算结果
 12. 输入普通问题，确认仍走 RAG 并返回 citations
+13. 在 Chat 模式选择 "ReAct"
+14. 输入：`计算 1+2*3`，确认 answer 显示 7，页面显示 ReAct Steps
+15. 输入：`echo hello`，确认调用 echo_tool
+16. 输入：`系统状态`，确认调用 get_system_status_tool
+17. 输入普通文档问题，确认 fallback 到 RAG
+18. 输入 `/tool calculator_tool {"expression":"1+2"}`，确认 /tool 优先级高于 ReAct
 
 ## v0.2 已知限制
 
@@ -373,20 +479,22 @@ docker compose up -d --build
 - **无认证**：当前无用户认证系统
 - **无权限**：当前无权限管理
 - **无 MCP**：未实现 Model Context Protocol
-- **无 ReAct**：当前 /tool 是简单命令触发，不支持 LLM 自动选择工具或多步循环
+- **ReAct 是确定性规划器**：不是生产级 LLM planner，基于规则匹配
+- **ReAct 单步**：当前仅支持单步工具调用，不支持多步推理链
 - **仅支持 .txt/.md**：不支持 PDF、DOCX 等文档格式
 - **无流式输出**：Chat API 不支持 SSE 流式响应
 
 ## v0.3 建议方向
 
 1. 接入真实 LLM（如 OpenAI API）
-2. 实现 ReAct 循环（LLM 自动选择工具）
-3. 实现用户认证和授权
-4. 支持 PDF、DOCX 文档格式
-5. 实现 SSE 流式输出
-6. 实现 MCP
-7. 实现多租户
-8. 实现 Admin Dashboard
+2. 实现 LLM 驱动的 ReAct planner（替换确定性规划器）
+3. 实现多步 ReAct 推理链
+4. 实现用户认证和授权
+5. 支持 PDF、DOCX 文档格式
+6. 实现 SSE 流式输出
+7. 实现 MCP
+8. 实现多租户
+9. 实现 Admin Dashboard
 
 ## 许可证
 

@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { api } from '../api/client'
-import type { Citation, Message, SendMessageResponse } from '../types'
+import type { Citation, Message, ReActStep, SendMessageResponse } from '../types'
 import { CitationList } from './CitationList'
+import { ReActSteps } from './ReActSteps'
 
 interface Props {
   sessionId: string
@@ -15,6 +16,8 @@ export function ChatWindow({ sessionId, messages, onMessageSent, onError }: Prop
   const [sending, setSending] = useState(false)
   const [lastCitations, setLastCitations] = useState<Citation[]>([])
   const [lastTraceId, setLastTraceId] = useState('')
+  const [lastSteps, setLastSteps] = useState<ReActStep[] | null>(null)
+  const [mode, setMode] = useState<string>('rag')
 
   const handleSend = async () => {
     const content = input.trim()
@@ -23,9 +26,10 @@ export function ChatWindow({ sessionId, messages, onMessageSent, onError }: Prop
     setInput('')
     setSending(true)
     try {
-      const res = await api.sendMessage(sessionId, content)
+      const res = await api.sendMessage(sessionId, content, mode)
       setLastCitations(res.citations)
       setLastTraceId(res.trace_id)
+      setLastSteps(res.steps)
       onMessageSent(res)
     } catch (e) {
       onError(e instanceof Error ? e.message : 'Failed to send message')
@@ -61,22 +65,36 @@ export function ChatWindow({ sessionId, messages, onMessageSent, onError }: Prop
         )}
       </div>
 
+      {lastSteps && lastSteps.length > 0 && (
+        <ReActSteps steps={lastSteps} />
+      )}
+
       {lastCitations.length > 0 && (
         <CitationList citations={lastCitations} traceId={lastTraceId} />
       )}
 
       <div className="chat-input">
-        <textarea
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={handleKeyDown}
-          placeholder="Type your question..."
-          disabled={sending}
-          rows={2}
-        />
-        <button onClick={handleSend} disabled={sending || !input.trim()}>
-          {sending ? 'Sending...' : 'Send'}
-        </button>
+        <div className="chat-input-row">
+          <select
+            value={mode}
+            onChange={(e) => setMode(e.target.value)}
+            className="mode-select"
+          >
+            <option value="rag">RAG</option>
+            <option value="react">ReAct</option>
+          </select>
+          <textarea
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder="Type your question... (/tool for manual tool call)"
+            disabled={sending}
+            rows={2}
+          />
+          <button onClick={handleSend} disabled={sending || !input.trim()}>
+            {sending ? 'Sending...' : 'Send'}
+          </button>
+        </div>
       </div>
     </div>
   )

@@ -60,10 +60,10 @@ export const api = {
   // Messages
   getMessages: (sessionId: string) =>
     request<MessageListResponse>(`/api/chat/sessions/${sessionId}/messages`),
-  sendMessage: (sessionId: string, content: string) =>
+  sendMessage: (sessionId: string, content: string, mode?: string) =>
     request<SendMessageResponse>(`/api/chat/sessions/${sessionId}/messages`, {
       method: 'POST',
-      body: JSON.stringify({ content }),
+      body: JSON.stringify({ content, mode }),
     }),
 
   // Tools

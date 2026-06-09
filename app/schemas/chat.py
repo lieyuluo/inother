@@ -19,6 +19,10 @@ class SendMessageRequest(BaseModel):
     """Request schema for sending a message to a session."""
 
     content: str = Field(min_length=1, description="Message content, cannot be empty")
+    mode: str | None = Field(
+        default=None,
+        description="Processing mode: 'rag' (default) or 'react'",
+    )
 
     @field_validator("content")
     @classmethod
@@ -76,6 +80,19 @@ class CitationResponse(BaseModel):
     snippet: str
 
 
+class ReActStepResponse(BaseModel):
+    """Response schema for a ReAct step."""
+
+    step_index: int
+    thought: str
+    action: str
+    action_input: dict[str, object]
+    observation: str = ""
+    status: str = "success"
+    tool_name: str | None = None
+    latency_ms: float | None = None
+
+
 class SendMessageResponse(BaseModel):
     """Response schema for sending a message (includes user and assistant messages)."""
 
@@ -83,3 +100,10 @@ class SendMessageResponse(BaseModel):
     assistant_message: MessageResponse
     citations: list[CitationResponse] = Field(default_factory=list)
     trace_id: str = ""
+    steps: list[ReActStepResponse] | None = Field(
+        default=None, description="ReAct execution steps (only in react mode)"
+    )
+    tool_calls: list[dict[str, object]] | None = Field(
+        default=None, description="Tool calls made during ReAct execution"
+    )
+    mode: str | None = Field(default=None, description="Processing mode used (rag or react)")

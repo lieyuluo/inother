@@ -116,7 +116,13 @@ async def send_message(
 ) -> SendMessageResponse:
     """Send a message to a chat session."""
     service = ChatService(session)
-    result = await service.send_message(session_id, content=request.content)
+    try:
+        result = await service.send_message(session_id, content=request.content, mode=request.mode)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        ) from e
     if not result:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
