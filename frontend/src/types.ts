@@ -52,6 +52,25 @@ export interface ReActStep {
   latency_ms: number | null
 }
 
+export interface PlanStep {
+  step_index: number
+  description: string
+  action_type: string
+  tool_name: string | null
+  tool_input: Record<string, unknown>
+  status: string
+}
+
+export interface StepResult {
+  step_index: number
+  status: string
+  output: string
+  error: string | null
+  latency_ms: number | null
+  tool_name: string | null
+  citations: Record<string, unknown>[]
+}
+
 export interface SendMessageResponse {
   user_message: Message
   assistant_message: Message
@@ -60,6 +79,8 @@ export interface SendMessageResponse {
   steps: ReActStep[] | null
   tool_calls: Record<string, unknown>[] | null
   mode: string | null
+  plan: PlanStep[] | null
+  step_results: StepResult[] | null
 }
 
 export interface SessionListResponse {

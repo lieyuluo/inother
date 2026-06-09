@@ -633,3 +633,74 @@ button:disabled {
   min-width: 80px;
   height: 38px;
 }
+
+/* Plan & Execute Trace */
+.plan-execute-trace {
+  margin: 8px 0;
+  padding: 8px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-surface);
+}
+
+.plan-execute-trace h4 {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  margin-bottom: 8px;
+  color: var(--color-text-secondary);
+}
+
+.plan-step {
+  margin-bottom: 8px;
+  padding: 8px;
+  border-radius: 4px;
+  border: 1px solid var(--color-border);
+  font-size: 0.8125rem;
+}
+
+.plan-step-success {
+  background: #f0fdf4;
+  border-color: #bbf7d0;
+}
+
+.plan-step-error {
+  background: #fef2f2;
+  border-color: #fecaca;
+}
+
+.plan-step-skipped {
+  background: #f8fafc;
+  border-color: #e2e8f0;
+}
+
+.plan-step-pending {
+  background: #fefce8;
+  border-color: #fef08a;
+}
+
+.plan-step-running {
+  background: #eff6ff;
+  border-color: #bfdbfe;
+}
+
+.plan-step-header {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 4px;
+  flex-wrap: wrap;
+}
+
+.step-action-type {
+  font-size: 0.6875rem;
+  font-weight: 500;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: #f3e8ff;
+  color: #7c3aed;
+  text-transform: uppercase;
+}
+
+.step-field-error {
+  color: var(--color-error);
+}

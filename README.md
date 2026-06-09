@@ -4,7 +4,7 @@
 
 ## 项目介绍
 
-Enterprise AI Agent 是一个企业级 AI Agent 应用，提供 AI 对话、文档管理、RAG（检索增强生成）、工具调用和 ReAct Agent 功能。v0.2 Phase 3 新增了 ReAct Agent（确定性规划器）和 Chat mode 支持。
+Enterprise AI Agent 是一个企业级 AI Agent 应用，提供 AI 对话、文档管理、RAG（检索增强生成）、工具调用、ReAct Agent 和 Plan-and-Execute Agent 功能。v0.2 Phase 4 新增了 Plan-and-Execute Agent（确定性规划器）。
 
 ## v0.2 功能清单
 
@@ -26,6 +26,9 @@ Enterprise AI Agent 是一个企业级 AI Agent 应用，提供 AI 对话、文�
 - **ReAct Agent（确定性规划器，非生产级 LLM planner）**
 - **Chat API 支持 mode="react" 模式**
 - **前端 ReAct Steps 展示**
+- **Plan-and-Execute Agent（确定性规划器，非生产级 LLM planner）**
+- **Chat API 支持 mode="plan_execute" 模式**
+- **前端 Plan & Execute Trace 展示**
 - 基础 Web UI
 - Docker Compose 一键部署
 
@@ -219,9 +222,88 @@ curl -X POST http://localhost:8000/api/chat/sessions/{session_id}/messages \
 ### ReAct 限制
 
 - **无真实 LLM 自动规划**：当前使用确定性规则，不是 LLM chain-of-thought
-- **无多步复杂任务**：当前单步工具调用，不支持多步推理链
-- **无 Plan-and-Execute**：未实现计划-执行模式
 - **无 MCP**：未实现 Model Context Protocol
+
+## Plan-and-Execute Agent 说明
+
+Plan-and-Execute Agent 使用**确定性规划器（DeterministicPlanPlanner）**将用户问题分解为多步计划，然后逐步执行。
+
+### 重要说明
+
+- 当前 Planner 是 **deterministic（基于规则）**，不是生产级 LLM planner
+- 规则稳定可测试，但不具备 LLM 的语义理解能力
+- 未来接入真实 LLM 后可替换为 LLM planner
+
+### Deterministic Planner 规则
+
+| 规则 | 匹配条件 | 生成步骤 |
+|------|----------|----------|
+| 1 | "生成报告/总结" + "文档/知识库" | search_documents_tool → final |
+| 2 | "先…再…" / "first…then…" 多步模式 | 多个 tool/rag 步骤 → final |
+| 3 | "系统状态" + "文档" | get_system_status_tool → search_documents_tool → final |
+| 4 | 单工具任务 | 对应 tool → final |
+| 5 | 无匹配 | rag → final |
+
+### 执行流程
+
+1. **Planner**：根据问题生成确定性计划
+2. **Executor**：逐步执行计划（tool 步骤调用 ToolService，rag 步骤调用 RAGAgent）
+3. **Verifier**：检查执行结果（success / partial_error / max_steps_reached）
+4. **Finalizer**：生成最终回答
+
+### Chat API mode="plan_execute" 示例
+
+```bash
+curl -X POST http://localhost:8000/api/chat/sessions/{session_id}/messages \
+  -H "Content-Type: application/json" \
+  -d '{"content": "请先查看系统状态，再搜索文档并总结", "mode": "plan_execute"}'
+```
+
+优先级：`/tool` 命令 > `mode="plan_execute"` > `mode="react"` > 默认 RAG
+
+### Plan-and-Execute Response 示例
+
+```json
+{
+  "user_message": {"id": "...", "role": "user", "content": "计算 1+2*3"},
+  "assistant_message": {"id": "...", "role": "assistant", "content": "Plan executed successfully. Step 0: ..."},
+  "citations": [],
+  "trace_id": "abc123...",
+  "plan": [
+    {"step_index": 0, "description": "Call calculator_tool", "action_type": "tool", "tool_name": "calculator_tool", "tool_input": {"expression": "1+2*3"}, "status": "success"},
+    {"step_index": 1, "description": "Generate final answer", "action_type": "final", "status": "success"}
+  ],
+  "step_results": [
+    {"step_index": 0, "status": "success", "output": "{'result': 7, 'expression': '1+2*3'}", "tool_name": "calculator_tool", "latency_ms": 1.2},
+    {"step_index": 1, "status": "success", "output": "Final answer generated"}
+  ],
+  "tool_calls": [{"tool_name": "calculator_tool", "status": "success", "latency_ms": 1.2}],
+  "mode": "plan_execute"
+}
+```
+
+### Plan-and-Execute AuditLog 说明
+
+每次执行写入 AuditLog：
+
+- action: `plan_execute.run`
+- metadata 包含：trace_id、session_id、question、mode、plan_steps_count、step_results_count、tool_calls_count、citations_count、used_fallback、final_status
+
+注意：ToolService 仍写 `tool.invoke`，RAGAgent 仍写 `rag.query`。
+
+### 前端 Plan-and-Execute 模式使用方式
+
+1. 在聊天输入框上方选择模式：RAG / ReAct / Plan-Exec
+2. 选择 Plan-Exec 模式后，发送消息将走 Plan-and-Execute Agent
+3. 回复下方显示 Plan & Execute Trace（每个步骤的 Description、Action Type、Output、Status）
+4. 继续支持 `/tool` 手动命令和 ReAct 模式
+
+### Plan-and-Execute 限制
+
+- **无真实 LLM 规划**：当前使用确定性规则
+- **非复杂多智能体**：单 Agent 顺序执行
+- **无 MCP**：未实现 Model Context Protocol
+- **max_steps 限制**：超过最大步数会截断
 
 ## Web UI Tool Panel 使用说明
 
@@ -258,7 +340,7 @@ curl -X POST http://localhost:8000/api/chat/sessions/{session_id}/messages \
 ```
 enterprise-ai-agent/
 ├── app/                        # 后端应用
-│   ├── agents/                 # RAG Agent, ReAct Agent
+│   ├── agents/                 # RAG Agent, ReAct Agent, Plan-and-Execute Agent
 │   ├── api/                    # API 路由
 │   ├── core/                   # 配置、日志、错误处理
 │   ├── db/                     # 数据库模型、Repository
@@ -277,7 +359,8 @@ enterprise-ai-agent/
 │   │   ├── api/client.ts       # API 客户端
 │   │   ├── components/         # React 组件
 │   │   │   ├── ToolPanel.tsx   # 工具面板组件
-│   │   │   └── ReActSteps.tsx  # ReAct 步骤展示组件
+│   │   │   ├── ReActSteps.tsx  # ReAct 步骤展示组件
+│   │   │   └── PlanExecuteTrace.tsx  # Plan-Execute 追踪组件
 │   │   ├── App.tsx             # 主应用
 │   │   ├── types.ts            # TypeScript 类型
 │   │   └── styles.css          # 样式
@@ -408,7 +491,7 @@ docker compose ps
 | GET | `/api/chat/sessions` | 列出聊天会话 |
 | GET | `/api/chat/sessions/{session_id}` | 获取单个会话 |
 | GET | `/api/chat/sessions/{session_id}/messages` | 获取消息列表 |
-| POST | `/api/chat/sessions/{session_id}/messages` | 发送消息（RAG 问答、/tool 调用或 ReAct 模式） |
+| POST | `/api/chat/sessions/{session_id}/messages` | 发送消息（RAG 问答、/tool 调用、ReAct 或 Plan-Execute 模式） |
 
 ### Document API
 
@@ -438,10 +521,10 @@ docker compose ps
    - **Sessions**：创建或选择聊天会话
 4. 右侧聊天区域：
    - 选择会话后显示消息历史
-   - 选择模式：RAG 或 ReAct
-   - 输入问题并发送（RAG 问答或 ReAct 工具选择）
+   - 选择模式：RAG / ReAct / Plan-Exec
+   - 输入问题并发送（RAG 问答、ReAct 工具选择或 Plan-Execute 多步计划）
    - 输入 `/tool <name> <json>` 调用工具（优先级最高）
-   - 查看 assistant 回答、citations 和 ReAct Steps
+   - 查看 assistant 回答、citations、ReAct Steps 和 Plan Trace
 
 ## 手动端到端验收流程
 
@@ -470,6 +553,13 @@ docker compose up -d --build
 16. 输入：`系统状态`，确认调用 get_system_status_tool
 17. 输入普通文档问题，确认 fallback 到 RAG
 18. 输入 `/tool calculator_tool {"expression":"1+2"}`，确认 /tool 优先级高于 ReAct
+19. 在 Chat 模式选择 "Plan-Exec"
+20. 输入：`请先查看系统状态，再搜索文档并总结`
+21. 确认页面显示 Plan 和 Step Results
+22. 确认调用 get_system_status_tool 和 search_documents_tool
+23. 输入：`计算 1+2*3`，确认 calculator_tool + final 执行
+24. 输入无法规划的问题，确认 fallback 到 RAG
+25. 输入 `/tool calculator_tool {"expression":"1+2"}`，确认 /tool 优先级高于 Plan-Exec
 
 ## v0.2 已知限制
 
@@ -480,7 +570,7 @@ docker compose up -d --build
 - **无权限**：当前无权限管理
 - **无 MCP**：未实现 Model Context Protocol
 - **ReAct 是确定性规划器**：不是生产级 LLM planner，基于规则匹配
-- **ReAct 单步**：当前仅支持单步工具调用，不支持多步推理链
+- **Plan-and-Execute 是确定性规划器**：不是生产级 LLM planner，基于规则匹配
 - **仅支持 .txt/.md**：不支持 PDF、DOCX 等文档格式
 - **无流式输出**：Chat API 不支持 SSE 流式响应
 
@@ -488,7 +578,7 @@ docker compose up -d --build
 
 1. 接入真实 LLM（如 OpenAI API）
 2. 实现 LLM 驱动的 ReAct planner（替换确定性规划器）
-3. 实现多步 ReAct 推理链
+3. 实现 LLM 驱动的 Plan-and-Execute planner
 4. 实现用户认证和授权
 5. 支持 PDF、DOCX 文档格式
 6. 实现 SSE 流式输出

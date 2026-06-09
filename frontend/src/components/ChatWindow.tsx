@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { api } from '../api/client'
-import type { Citation, Message, ReActStep, SendMessageResponse } from '../types'
+import type { Citation, Message, PlanStep, ReActStep, SendMessageResponse, StepResult } from '../types'
 import { CitationList } from './CitationList'
+import { PlanExecuteTrace } from './PlanExecuteTrace'
 import { ReActSteps } from './ReActSteps'
 
 interface Props {
@@ -17,6 +18,8 @@ export function ChatWindow({ sessionId, messages, onMessageSent, onError }: Prop
   const [lastCitations, setLastCitations] = useState<Citation[]>([])
   const [lastTraceId, setLastTraceId] = useState('')
   const [lastSteps, setLastSteps] = useState<ReActStep[] | null>(null)
+  const [lastPlan, setLastPlan] = useState<PlanStep[] | null>(null)
+  const [lastStepResults, setLastStepResults] = useState<StepResult[] | null>(null)
   const [mode, setMode] = useState<string>('rag')
 
   const handleSend = async () => {
@@ -30,6 +33,8 @@ export function ChatWindow({ sessionId, messages, onMessageSent, onError }: Prop
       setLastCitations(res.citations)
       setLastTraceId(res.trace_id)
       setLastSteps(res.steps)
+      setLastPlan(res.plan)
+      setLastStepResults(res.step_results)
       onMessageSent(res)
     } catch (e) {
       onError(e instanceof Error ? e.message : 'Failed to send message')
@@ -65,6 +70,10 @@ export function ChatWindow({ sessionId, messages, onMessageSent, onError }: Prop
         )}
       </div>
 
+      {lastPlan && lastStepResults && lastPlan.length > 0 && (
+        <PlanExecuteTrace plan={lastPlan} stepResults={lastStepResults} />
+      )}
+
       {lastSteps && lastSteps.length > 0 && (
         <ReActSteps steps={lastSteps} />
       )}
@@ -82,6 +91,7 @@ export function ChatWindow({ sessionId, messages, onMessageSent, onError }: Prop
           >
             <option value="rag">RAG</option>
             <option value="react">ReAct</option>
+            <option value="plan_execute">Plan-Exec</option>
           </select>
           <textarea
             value={input}

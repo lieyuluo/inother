@@ -21,7 +21,7 @@ class SendMessageRequest(BaseModel):
     content: str = Field(min_length=1, description="Message content, cannot be empty")
     mode: str | None = Field(
         default=None,
-        description="Processing mode: 'rag' (default) or 'react'",
+        description="Processing mode: 'rag' (default), 'react', or 'plan_execute'",
     )
 
     @field_validator("content")
@@ -93,6 +93,29 @@ class ReActStepResponse(BaseModel):
     latency_ms: float | None = None
 
 
+class PlanStepResponse(BaseModel):
+    """Response schema for a plan step."""
+
+    step_index: int
+    description: str
+    action_type: str
+    tool_name: str | None = None
+    tool_input: dict[str, object] = {}
+    status: str = "pending"
+
+
+class StepResultResponse(BaseModel):
+    """Response schema for a step result."""
+
+    step_index: int
+    status: str
+    output: str = ""
+    error: str | None = None
+    latency_ms: float | None = None
+    tool_name: str | None = None
+    citations: list[dict[str, object]] = []
+
+
 class SendMessageResponse(BaseModel):
     """Response schema for sending a message (includes user and assistant messages)."""
 
@@ -104,6 +127,12 @@ class SendMessageResponse(BaseModel):
         default=None, description="ReAct execution steps (only in react mode)"
     )
     tool_calls: list[dict[str, object]] | None = Field(
-        default=None, description="Tool calls made during ReAct execution"
+        default=None, description="Tool calls made during execution"
     )
-    mode: str | None = Field(default=None, description="Processing mode used (rag or react)")
+    mode: str | None = Field(default=None, description="Processing mode used")
+    plan: list[PlanStepResponse] | None = Field(
+        default=None, description="Plan steps (only in plan_execute mode)"
+    )
+    step_results: list[StepResultResponse] | None = Field(
+        default=None, description="Step results (only in plan_execute mode)"
+    )

@@ -6,6 +6,8 @@ from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.agents.plan_execute_agent import PlanExecuteAgent
+from app.agents.plan_execute_schemas import PlanStep, StepResult
 from app.agents.rag_agent import RAGAgent
 from app.agents.react_agent import ReActAgent
 from app.agents.react_schemas import ReActStep
@@ -21,10 +23,12 @@ from app.schemas.chat import (
     CitationResponse,
     MessageListResponse,
     MessageResponse,
+    PlanStepResponse,
     ReActStepResponse,
     SendMessageResponse,
     SessionListResponse,
     SessionResponse,
+    StepResultResponse,
 )
 from app.tools.service import ToolService
 
@@ -32,7 +36,7 @@ from app.tools.service import ToolService
 _TOOL_PATTERN = re.compile(r"^/tool\s+(\S+)\s*(.*)$", re.DOTALL)
 
 # Supported modes
-_SUPPORTED_MODES = {"rag", "react"}
+_SUPPORTED_MODES = {"rag", "react", "plan_execute"}
 
 
 def _parse_tool_command(content: str) -> tuple[str, dict[str, object]] | None:
@@ -148,13 +152,14 @@ class ChatService:
 
         Priority:
         1. /tool command → manual tool call
-        2. mode="react" → ReAct Agent
-        3. default (mode=None or mode="rag") → RAG Agent
+        2. mode="plan_execute" → Plan-and-Execute Agent
+        3. mode="react" → ReAct Agent
+        4. default (mode=None or mode="rag") → RAG Agent
 
         Args:
             session_id: Chat session ID.
             content: Message content.
-            mode: Processing mode ('rag' or 'react').
+            mode: Processing mode ('rag', 'react', or 'plan_execute').
 
         Returns:
             SendMessageResponse or None if session not found.
@@ -190,7 +195,15 @@ class ChatService:
                 user_message=user_message,
             )
 
-        # Priority 2: ReAct mode
+        # Priority 2: Plan-and-Execute mode
+        if mode == "plan_execute":
+            return await self._handle_plan_execute_query(
+                session_id=session_id,
+                content=content,
+                user_message=user_message,
+            )
+
+        # Priority 3: ReAct mode
         if mode == "react":
             return await self._handle_react_query(
                 session_id=session_id,
@@ -198,7 +211,7 @@ class ChatService:
                 user_message=user_message,
             )
 
-        # Priority 3: Default RAG mode
+        # Priority 4: Default RAG mode
         return await self._handle_rag_query(
             session_id=session_id,
             content=content,
@@ -248,6 +261,83 @@ class ChatService:
             citations=[],
             trace_id=result.trace_id,
             mode="tool",
+        )
+
+    async def _handle_plan_execute_query(
+        self,
+        session_id: UUID,
+        content: str,
+        user_message: ChatMessage,
+    ) -> SendMessageResponse:
+        """Handle a Plan-and-Execute mode query."""
+        agent = PlanExecuteAgent(session=self.session)
+        result = await agent.query(content, session_id=session_id)
+
+        # Build plan step responses
+        plan_responses = [
+            PlanStepResponse(
+                step_index=s.step_index,
+                description=s.description,
+                action_type=s.action_type,
+                tool_name=s.tool_name,
+                tool_input=s.tool_input,
+                status=s.status,
+            )
+            for s in result.plan
+        ]
+
+        # Build step result responses
+        step_result_responses = [
+            StepResultResponse(
+                step_index=sr.step_index,
+                status=sr.status,
+                output=sr.output,
+                error=sr.error,
+                latency_ms=sr.latency_ms,
+                tool_name=sr.tool_name,
+                citations=sr.citations,
+            )
+            for sr in result.step_results
+        ]
+
+        # Build citation responses
+        citation_responses = [
+            CitationResponse(
+                document_id=c["document_id"],
+                document_title=c["document_title"],
+                chunk_id=c["chunk_id"],
+                chunk_index=c["chunk_index"],
+                score=c["score"],
+                snippet=c["snippet"],
+            )
+            for c in result.citations
+        ]
+
+        assistant_metadata = {
+            "mode": "plan_execute",
+            "trace_id": result.trace_id,
+            "plan": [_plan_step_to_dict(s) for s in result.plan],
+            "step_results": [_step_result_to_dict(sr) for sr in result.step_results],
+            "tool_calls": result.tool_calls,
+            "citations": result.citations,
+            "final_status": result.final_status,
+        }
+        assistant_message = await self.message_repo.create(
+            session_id=session_id,
+            role="assistant",
+            content=result.answer,
+            metadata=assistant_metadata,
+        )
+
+        return SendMessageResponse(
+            user_message=_msg_to_response(user_message),
+            assistant_message=_msg_to_response(assistant_message),
+            citations=citation_responses,
+            trace_id=result.trace_id,
+            tool_calls=result.tool_calls,
+            mode="plan_execute",
+            plan=plan_responses,
+            step_results=step_result_responses,
         )
 
     async def _handle_react_query(
@@ -404,4 +494,36 @@ def _step_to_dict(step: ReActStep) -> dict[str, object]:
         result["tool_name"] = step.tool_name
     if step.latency_ms is not None:
         result["latency_ms"] = step.latency_ms
+    return result
+
+
+def _plan_step_to_dict(step: PlanStep) -> dict[str, object]:
+    """Convert a PlanStep to a dictionary for metadata storage."""
+    result: dict[str, object] = {
+        "step_index": step.step_index,
+        "description": step.description,
+        "action_type": step.action_type,
+        "tool_input": step.tool_input,
+        "status": step.status,
+    }
+    if step.tool_name is not None:
+        result["tool_name"] = step.tool_name
+    return result
+
+
+def _step_result_to_dict(sr: StepResult) -> dict[str, object]:
+    """Convert a StepResult to a dictionary for metadata storage."""
+    result: dict[str, object] = {
+        "step_index": sr.step_index,
+        "status": sr.status,
+        "output": sr.output,
+    }
+    if sr.error is not None:
+        result["error"] = sr.error
+    if sr.latency_ms is not None:
+        result["latency_ms"] = sr.latency_ms
+    if sr.tool_name is not None:
+        result["tool_name"] = sr.tool_name
+    if sr.citations:
+        result["citations"] = sr.citations
     return result
