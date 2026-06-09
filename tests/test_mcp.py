@@ -54,11 +54,17 @@ class TestDemoMCPServer:
         server = DemoMCPServer()
         result = server.call_tool("mcp_get_business_metric", {"metric": "unknown_metric"})
         assert result.status == "error"
-        assert "unsupported" in result.error.lower() or "not found" in result.error.lower() or "unsupported" in result.error.lower()
+        assert (
+            "unsupported" in result.error.lower()
+            or "not found" in result.error.lower()
+            or "unsupported" in result.error.lower()
+        )
 
     def test_mcp_create_ticket_success(self) -> None:
         server = DemoMCPServer()
-        result = server.call_tool("mcp_create_ticket", {"title": "Test", "description": "Test desc"})
+        result = server.call_tool(
+            "mcp_create_ticket", {"title": "Test", "description": "Test desc"}
+        )
         assert result.status == "success"
         assert "ticket_id" in result.output
         assert result.output["title"] == "Test"
@@ -225,7 +231,10 @@ class TestChatMCPTool:
         )
         assert msg_resp.status_code == 201
         data = msg_resp.json()
-        assert "ticket" in data["assistant_message"]["content"].lower() or "created" in data["assistant_message"]["content"].lower()
+        assert (
+            "ticket" in data["assistant_message"]["content"].lower()
+            or "created" in data["assistant_message"]["content"].lower()
+        )
 
     def test_assistant_metadata_saves_tool_call(self, client: TestClient) -> None:
         session_resp = client.post("/api/chat/sessions", json={})

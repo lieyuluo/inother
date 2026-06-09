@@ -122,9 +122,17 @@ class DeterministicPlanPlanner:
             return _trim_plan(steps, max_steps)
 
         # Rule 3.5: MCP - 先查看业务指标，再创建工单
-        mcp_metric_keywords = ["业务指标", "business metric", "revenue", "active_users", "active users"]
+        mcp_metric_keywords = [
+            "业务指标",
+            "business metric",
+            "revenue",
+            "active_users",
+            "active users",
+        ]
         mcp_ticket_keywords = ["创建工单", "create ticket", "提交工单", "新建工单"]
-        if any(kw in q for kw in mcp_metric_keywords) and any(kw in q for kw in mcp_ticket_keywords):
+        if any(kw in q for kw in mcp_metric_keywords) and any(
+            kw in q for kw in mcp_ticket_keywords
+        ):
             steps = [
                 PlanStep(
                     step_index=0,
@@ -149,7 +157,12 @@ class DeterministicPlanPlanner:
             return _trim_plan(steps, max_steps)
 
         # Rule 3.6: MCP - 生成业务指标报告
-        mcp_report_keywords = ["生成业务指标报告", "业务指标报告", "business metric report", "生成指标报告"]
+        mcp_report_keywords = [
+            "生成业务指标报告",
+            "业务指标报告",
+            "business metric report",
+            "生成指标报告",
+        ]
         if any(kw in q for kw in mcp_report_keywords):
             steps = [
                 PlanStep(
@@ -282,7 +295,10 @@ def _detect_single_tool(question: str, q: str) -> tuple[str, dict[str, object]] 
 
     # MCP business metric
     mcp_metric_keywords = [
-        "business metric", "业务指标", "查询指标", "指标查询",
+        "business metric",
+        "业务指标",
+        "查询指标",
+        "指标查询",
     ]
     if any(kw in q for kw in mcp_metric_keywords):
         metric = "revenue"
