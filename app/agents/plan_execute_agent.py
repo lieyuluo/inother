@@ -76,8 +76,11 @@ class DeterministicPlanPlanner:
 
         # Rule 2: Multi-step patterns (先…再… / first…then…)
         multi_step_patterns = [
-            r"先.+再", r"先.+然后", r"先.+接着",
-            r"first.+then", r"first.+after",
+            r"先.+再",
+            r"先.+然后",
+            r"先.+接着",
+            r"first.+then",
+            r"first.+after",
         ]
         if any(re.search(p, q) for p in multi_step_patterns):
             steps = _build_multi_step_plan(question, q, max_steps)
@@ -85,8 +88,14 @@ class DeterministicPlanPlanner:
 
         # Rule 3: System status + documents → get_system_status + search_documents + final
         status_keywords = [
-            "系统状态", "system status", "系统信息", "system info",
-            "health", "健康", "服务状态", "service status",
+            "系统状态",
+            "system status",
+            "系统信息",
+            "system info",
+            "health",
+            "健康",
+            "服务状态",
+            "service status",
         ]
         if any(kw in q for kw in status_keywords) and any(kw in q for kw in doc_keywords):
             steps = [
@@ -164,9 +173,7 @@ def _trim_plan(steps: list[PlanStep], max_steps: int) -> list[PlanStep]:
     return trimmed
 
 
-def _detect_single_tool(
-    question: str, q: str
-) -> tuple[str, dict[str, object]] | None:
+def _detect_single_tool(question: str, q: str) -> tuple[str, dict[str, object]] | None:
     """Detect a single tool match from the question.
 
     Returns (tool_name, tool_input) or None.
@@ -187,9 +194,7 @@ def _detect_single_tool(
             expr = expr.replace("^", "**")
             return ("calculator_tool", {"expression": expr})
 
-    if re.match(r"^[\d+\-*/().%\s]+$", question.strip()) and any(
-        c in question for c in "+-*/%"
-    ):
+    if re.match(r"^[\d+\-*/().%\s]+$", question.strip()) and any(c in question for c in "+-*/%"):
         expr = question.strip().replace("^", "**")
         return ("calculator_tool", {"expression": expr})
 
@@ -198,22 +203,33 @@ def _detect_single_tool(
         text = question.strip()
         for prefix in ("echo ", "回显 "):
             if text.lower().startswith(prefix):
-                text = text[len(prefix):].strip()
+                text = text[len(prefix) :].strip()
                 break
         return ("echo_tool", {"text": text})
 
     # System status
     status_keywords = [
-        "系统状态", "system status", "系统信息", "system info",
-        "health", "健康", "服务状态", "service status",
+        "系统状态",
+        "system status",
+        "系统信息",
+        "system info",
+        "health",
+        "健康",
+        "服务状态",
+        "service status",
     ]
     if any(kw in q for kw in status_keywords):
         return ("get_system_status_tool", {})
 
     # Search documents
     search_keywords = [
-        "搜索文档", "search documents", "知识库搜索",
-        "search knowledge", "搜索知识", "文档搜索", "document search",
+        "搜索文档",
+        "search documents",
+        "知识库搜索",
+        "search knowledge",
+        "搜索知识",
+        "文档搜索",
+        "document search",
     ]
     if any(kw in q for kw in search_keywords):
         return ("search_documents_tool", {"query": question})
@@ -221,9 +237,7 @@ def _detect_single_tool(
     return None
 
 
-def _build_multi_step_plan(
-    question: str, q: str, max_steps: int
-) -> list[PlanStep]:
+def _build_multi_step_plan(question: str, q: str, max_steps: int) -> list[PlanStep]:
     """Build a multi-step plan for 先…再… / first…then… patterns."""
     steps: list[PlanStep] = []
     idx = 0
@@ -234,7 +248,9 @@ def _build_multi_step_plan(
     cn_parts = [p.strip() for p in cn_parts if p.strip()]
 
     # English pattern
-    en_parts = re.split(r"\b(?:first|then|after\s+that|afterwards)\b", question, flags=re.IGNORECASE)
+    en_parts = re.split(
+        r"\b(?:first|then|after\s+that|afterwards)\b", question, flags=re.IGNORECASE
+    )
     en_parts = [p.strip() for p in en_parts if p.strip()]
 
     # Use whichever gives more parts
@@ -245,20 +261,24 @@ def _build_multi_step_plan(
         single_tool = _detect_single_tool(question, q)
         if single_tool:
             tool_name, tool_input = single_tool
-            steps.append(PlanStep(
-                step_index=idx,
-                description=f"Call {tool_name}",
-                action_type="tool",
-                tool_name=tool_name,
-                tool_input=tool_input,
-            ))
+            steps.append(
+                PlanStep(
+                    step_index=idx,
+                    description=f"Call {tool_name}",
+                    action_type="tool",
+                    tool_name=tool_name,
+                    tool_input=tool_input,
+                )
+            )
             idx += 1
         else:
-            steps.append(PlanStep(
-                step_index=idx,
-                description="Query knowledge base via RAG",
-                action_type="rag",
-            ))
+            steps.append(
+                PlanStep(
+                    step_index=idx,
+                    description="Query knowledge base via RAG",
+                    action_type="rag",
+                )
+            )
             idx += 1
     else:
         for part in parts:
@@ -268,27 +288,33 @@ def _build_multi_step_plan(
             single_tool = _detect_single_tool(part, part_lower)
             if single_tool:
                 tool_name, tool_input = single_tool
-                steps.append(PlanStep(
-                    step_index=idx,
-                    description=f"Call {tool_name}: {part[:50]}",
-                    action_type="tool",
-                    tool_name=tool_name,
-                    tool_input=tool_input,
-                ))
+                steps.append(
+                    PlanStep(
+                        step_index=idx,
+                        description=f"Call {tool_name}: {part[:50]}",
+                        action_type="tool",
+                        tool_name=tool_name,
+                        tool_input=tool_input,
+                    )
+                )
             else:
-                steps.append(PlanStep(
-                    step_index=idx,
-                    description=f"Query RAG: {part[:50]}",
-                    action_type="rag",
-                ))
+                steps.append(
+                    PlanStep(
+                        step_index=idx,
+                        description=f"Query RAG: {part[:50]}",
+                        action_type="rag",
+                    )
+                )
             idx += 1
 
     # Always add final step
-    steps.append(PlanStep(
-        step_index=idx,
-        description="Generate final answer",
-        action_type="final",
-    ))
+    steps.append(
+        PlanStep(
+            step_index=idx,
+            description="Generate final answer",
+            action_type="final",
+        )
+    )
 
     return steps
 
@@ -464,7 +490,7 @@ class Verifier:
         # Check if plan has pending steps that weren't executed
         pending_steps = [s for s in plan if s.status == "pending"]
         executed_count = len(step_results)
-        if pending_steps and executed_count < len(plan):
+        if pending_steps and (executed_count < len(plan) or executed_count >= max_steps):
             return "max_steps_reached"
 
         # Check for errors
@@ -508,17 +534,23 @@ class Finalizer:
             return "No results from RAG fallback."
 
         if final_status == "partial_error":
-            success_steps = [sr for sr in step_results if sr.status == "success" and sr.output != "Final answer generated"]
+            success_steps = [
+                sr
+                for sr in step_results
+                if sr.status == "success" and sr.output != "Final answer generated"
+            ]
             error_steps = [sr for sr in step_results if sr.status == "error"]
             parts = []
             if success_steps:
-                parts.append("Completed steps: " + "; ".join(
-                    f"Step {s.step_index}: {s.output[:80]}" for s in success_steps
-                ))
+                parts.append(
+                    "Completed steps: "
+                    + "; ".join(f"Step {s.step_index}: {s.output[:80]}" for s in success_steps)
+                )
             if error_steps:
-                parts.append("Failed steps: " + "; ".join(
-                    f"Step {s.step_index}: {s.error}" for s in error_steps
-                ))
+                parts.append(
+                    "Failed steps: "
+                    + "; ".join(f"Step {s.step_index}: {s.error}" for s in error_steps)
+                )
             return "Plan executed with errors. " + " ".join(parts)
 
         # All success
@@ -590,21 +622,25 @@ class PlanExecuteAgent:
             if step.action_type == "final" and len(step_results) > 0:
                 # Final step: just mark success
                 step.status = "success"
-                step_results.append(StepResult(
-                    step_index=step.step_index,
-                    status="success",
-                    output="Final answer generated",
-                ))
+                step_results.append(
+                    StepResult(
+                        step_index=step.step_index,
+                        status="success",
+                        output="Final answer generated",
+                    )
+                )
                 continue
 
             # Check max_steps: skip remaining if we've hit the limit
             if step.step_index >= self.max_steps:
                 step.status = "skipped"
-                step_results.append(StepResult(
-                    step_index=step.step_index,
-                    status="skipped",
-                    error="Skipped due to max_steps limit",
-                ))
+                step_results.append(
+                    StepResult(
+                        step_index=step.step_index,
+                        status="skipped",
+                        error="Skipped due to max_steps limit",
+                    )
+                )
                 continue
 
             step_result = await self.executor.execute_step(step, question, session_id)
@@ -612,18 +648,22 @@ class PlanExecuteAgent:
 
             # Collect tool calls
             if step_result.tool_name and step_result.status == "success":
-                tool_calls.append({
-                    "tool_name": step_result.tool_name,
-                    "status": step_result.status,
-                    "latency_ms": step_result.latency_ms,
-                })
+                tool_calls.append(
+                    {
+                        "tool_name": step_result.tool_name,
+                        "status": step_result.status,
+                        "latency_ms": step_result.latency_ms,
+                    }
+                )
             elif step_result.tool_name and step_result.status == "error":
-                tool_calls.append({
-                    "tool_name": step_result.tool_name,
-                    "status": step_result.status,
-                    "latency_ms": step_result.latency_ms,
-                    "error": step_result.error,
-                })
+                tool_calls.append(
+                    {
+                        "tool_name": step_result.tool_name,
+                        "status": step_result.status,
+                        "latency_ms": step_result.latency_ms,
+                        "error": step_result.error,
+                    }
+                )
 
             # Collect citations
             if step_result.citations:

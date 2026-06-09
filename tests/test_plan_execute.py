@@ -17,7 +17,6 @@ from app.agents.plan_execute_agent import (
 from app.agents.plan_execute_schemas import PlanStep, StepResult
 from app.db.models import AuditLog, Document
 
-
 # ── Planner Tests ──────────────────────────────────────────────────────
 
 
@@ -91,7 +90,7 @@ class TestDeterministicPlanPlanner:
         result1 = DeterministicPlanPlanner.plan("计算 1+2")
         result2 = DeterministicPlanPlanner.plan("计算 1+2")
         assert len(result1) == len(result2)
-        for s1, s2 in zip(result1, result2):
+        for s1, s2 in zip(result1, result2, strict=True):
             assert s1.step_index == s2.step_index
             assert s1.action_type == s2.action_type
             assert s1.tool_name == s2.tool_name
@@ -270,7 +269,9 @@ class TestFinalizer:
 
     def test_fallback_uses_rag_answer(self) -> None:
         step_results = [
-            StepResult(step_index=0, status="success", output="RAG answer here", citations=[{"doc": "x"}]),
+            StepResult(
+                step_index=0, status="success", output="RAG answer here", citations=[{"doc": "x"}]
+            ),
         ]
         answer = Finalizer.finalize(step_results, "success", used_fallback=True)
         assert "RAG answer" in answer
