@@ -1,11 +1,14 @@
 """Chat service for business logic operations."""
 
+import json
+import re
 from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.rag_agent import RAGAgent
 from app.agents.schemas import Citation
+from app.db.models import ChatMessage
 from app.db.repositories import (
     AuditLogRepository,
     ChatMessageRepository,
@@ -20,6 +23,38 @@ from app.schemas.chat import (
     SessionListResponse,
     SessionResponse,
 )
+from app.tools.service import ToolService
+
+# Pattern: /tool <tool_name> <json_input>
+_TOOL_PATTERN = re.compile(r"^/tool\s+(\S+)\s*(.*)$", re.DOTALL)
+
+
+def _parse_tool_command(content: str) -> tuple[str, dict[str, object]] | None:
+    """Parse a /tool command from user message.
+
+    Args:
+        content: User message content.
+
+    Returns:
+        Tuple of (tool_name, input_data) if valid /tool command, None otherwise.
+    """
+    match = _TOOL_PATTERN.match(content.strip())
+    if not match:
+        return None
+
+    tool_name = match.group(1)
+    json_str = match.group(2).strip()
+
+    if not json_str:
+        return (tool_name, {})
+
+    try:
+        input_data = json.loads(json_str)
+        if not isinstance(input_data, dict):
+            return None
+        return (tool_name, input_data)
+    except json.JSONDecodeError:
+        return None
 
 
 class ChatService:
@@ -142,7 +177,10 @@ class ChatService:
         session_id: UUID,
         content: str,
     ) -> SendMessageResponse | None:
-        """Send a message to a session and get RAG-powered assistant response.
+        """Send a message to a session and get RAG-powered or tool-invoked response.
+
+        If the message starts with /tool, it triggers tool invocation.
+        Otherwise, it goes through the RAG Agent.
 
         Returns None if session doesn't exist.
         """
@@ -158,6 +196,109 @@ class ChatService:
             content=content,
         )
 
+        # Check if this is a /tool command
+        tool_parse = _parse_tool_command(content)
+        if tool_parse is not None:
+            return await self._handle_tool_call(
+                session_id=session_id,
+                tool_name=tool_parse[0],
+                tool_input=tool_parse[1],
+                user_message=user_message,
+            )
+
+        # Default: RAG Agent flow
+        return await self._handle_rag_query(
+            session_id=session_id,
+            content=content,
+            user_message=user_message,
+        )
+
+    async def _handle_tool_call(
+        self,
+        session_id: UUID,
+        tool_name: str,
+        tool_input: dict[str, object],
+        user_message: ChatMessage,
+    ) -> SendMessageResponse:
+        """Handle a /tool command invocation.
+
+        Args:
+            session_id: Chat session ID.
+            tool_name: Tool to invoke.
+            tool_input: Input for the tool.
+            user_message: The user message record.
+
+        Returns:
+            SendMessageResponse with tool result.
+        """
+        tool_service = ToolService(self.session)
+        result = await tool_service.invoke_tool(
+            tool_name=tool_name,
+            input_data=tool_input,
+            actor="system",
+            session_id=session_id,
+        )
+
+        # Format assistant response
+        if result.status == "success":
+            answer = f"[Tool: {result.tool_name}] {json.dumps(result.output, ensure_ascii=False, default=str)}"
+        else:
+            answer = f"[Tool: {result.tool_name}] Error: {result.error}"
+
+        # Create assistant message with tool_call metadata
+        assistant_metadata = {
+            "tool_call": {
+                "tool_name": result.tool_name,
+                "status": result.status,
+                "trace_id": result.trace_id,
+                "latency_ms": result.latency_ms,
+            },
+            "trace_id": result.trace_id,
+        }
+        assistant_message = await self.message_repo.create(
+            session_id=session_id,
+            role="assistant",
+            content=answer,
+            metadata=assistant_metadata,
+        )
+
+        return SendMessageResponse(
+            user_message=MessageResponse(
+                id=user_message.id,
+                session_id=user_message.session_id,
+                role=user_message.role,
+                content=user_message.content,
+                token_count=user_message.token_count,
+                created_at=user_message.created_at,
+            ),
+            assistant_message=MessageResponse(
+                id=assistant_message.id,
+                session_id=assistant_message.session_id,
+                role=assistant_message.role,
+                content=assistant_message.content,
+                token_count=assistant_message.token_count,
+                created_at=assistant_message.created_at,
+            ),
+            citations=[],  # Tool calls have no citations
+            trace_id=result.trace_id,
+        )
+
+    async def _handle_rag_query(
+        self,
+        session_id: UUID,
+        content: str,
+        user_message: ChatMessage,
+    ) -> SendMessageResponse:
+        """Handle a normal RAG query.
+
+        Args:
+            session_id: Chat session ID.
+            content: User question.
+            user_message: The user message record.
+
+        Returns:
+            SendMessageResponse with RAG answer and citations.
+        """
         # Run RAG Agent
         agent = RAGAgent(session=self.session)
         result = await agent.query(content)

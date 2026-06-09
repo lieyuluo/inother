@@ -6,6 +6,8 @@ import type {
   SendMessageResponse,
   Session,
   SessionListResponse,
+  ToolInvokeResponse,
+  ToolListResponse,
 } from '../types'
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
@@ -62,5 +64,13 @@ export const api = {
     request<SendMessageResponse>(`/api/chat/sessions/${sessionId}/messages`, {
       method: 'POST',
       body: JSON.stringify({ content }),
+    }),
+
+  // Tools
+  getTools: () => request<ToolListResponse>('/api/tools'),
+  invokeTool: (toolName: string, input: Record<string, unknown>) =>
+    request<ToolInvokeResponse>(`/api/tools/${toolName}/invoke`, {
+      method: 'POST',
+      body: JSON.stringify({ input }),
     }),
 }

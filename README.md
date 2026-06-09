@@ -4,7 +4,7 @@
 
 ## 项目介绍
 
-Enterprise AI Agent 是一个企业级 AI Agent 应用，提供 AI 对话、文档管理和 RAG（检索增强生成）功能。v0.2 版本增强了 Provider 架构，支持通过配置选择 LLM/Embedding Provider，并在 PostgreSQL 环境下使用 pgvector 原生检索。
+Enterprise AI Agent 是一个企业级 AI Agent 应用，提供 AI 对话、文档管理、RAG（检索增强生成）和工具调用功能。v0.2 Phase 2 新增了 Tool Registry 和基础 Tool Calling 能力。
 
 ## v0.2 功能清单
 
@@ -12,15 +12,127 @@ Enterprise AI Agent 是一个企业级 AI Agent 应用，提供 AI 对话、文�
 - Chat 会话和消息管理
 - 文档上传、列表、删除
 - RAG 检索与问答
-- **LLM Provider 可通过配置选择（fake/openai 占位）**
-- **Embedding Provider 可通过配置选择（fake/openai 占位）**
-- **PostgreSQL 环境下 Retriever 使用 pgvector 原生 cosine distance 查询**
-- **SQLite 测试环境下 Retriever 使用 Python cosine fallback**
+- LLM Provider 可通过配置选择（fake/openai 占位）
+- Embedding Provider 可通过配置选择（fake/openai 占位）
+- PostgreSQL 环境下 Retriever 使用 pgvector 原生 cosine distance 查询
+- SQLite 测试环境下 Retriever 使用 Python cosine fallback
 - Citations 追踪
 - AuditLog 审计日志
+- **Tool Registry 工具注册中心**
+- **5 个内置工具：echo、calculator、search_documents、get_system_status、list_documents**
+- **Chat 中通过 /tool 命令调用工具**
+- **Tool API（GET /api/tools, POST /api/tools/{name}/invoke）**
+- **Web UI Tool Panel**
 - 基础 Web UI
 - Docker Compose 一键部署
-- **datetime.utcnow() 已修复为 timezone-aware 写法**
+
+## Tool Registry 说明
+
+Tool Registry 是统一工具注册中心，管理所有可用工具。
+
+### 内置工具列表
+
+| 工具名 | 说明 | 输入 | 输出 |
+|--------|------|------|------|
+| `echo_tool` | 回显输入文本 | `{"text": "hello"}` | `{"text": "hello"}` |
+| `calculator_tool` | 安全算术表达式计算 | `{"expression": "1+2*3"}` | `{"result": 7}` |
+| `search_documents_tool` | 搜索知识库文档 | `{"query": "API", "top_k": 4}` | `{"results": [...]}` |
+| `get_system_status_tool` | 获取系统状态 | `{}` | `{"service": "...", "version": "...", "status": "ok"}` |
+| `list_documents_tool` | 列出非删除文档 | `{}` | `{"documents": [...]}` |
+
+### GET /api/tools 示例
+
+```bash
+curl http://localhost:8000/api/tools
+```
+
+响应：
+
+```json
+{
+  "tools": [
+    {
+      "name": "echo_tool",
+      "description": "Echo back the input text...",
+      "input_schema": {"type": "object", "properties": {"text": {"type": "string"}}, "required": ["text"]},
+      "requires_confirmation": false
+    }
+  ],
+  "total": 5
+}
+```
+
+### POST /api/tools/{tool_name}/invoke 示例
+
+```bash
+# 调用 echo_tool
+curl -X POST http://localhost:8000/api/tools/echo_tool/invoke \
+  -H "Content-Type: application/json" \
+  -d '{"input": {"text": "hello"}}'
+
+# 调用 calculator_tool
+curl -X POST http://localhost:8000/api/tools/calculator_tool/invoke \
+  -H "Content-Type: application/json" \
+  -d '{"input": {"expression": "1+2*3"}}'
+```
+
+响应：
+
+```json
+{
+  "tool_name": "calculator_tool",
+  "status": "success",
+  "output": {"result": 7, "expression": "1+2*3"},
+  "error": null,
+  "latency_ms": 0.5,
+  "trace_id": "abc123..."
+}
+```
+
+### Chat 中使用 /tool 触发工具调用
+
+在聊天输入框中输入 `/tool <工具名> <JSON输入>` 即可调用工具：
+
+```
+/tool echo_tool {"text":"hello"}
+/tool calculator_tool {"expression":"1+2*3"}
+/tool get_system_status_tool {}
+```
+
+- 只有以 `/tool` 开头的消息才触发工具调用
+- 工具调用结果作为 assistant message 保存
+- 工具调用时 citations 为空
+- 普通问题仍走 RAG Agent，不受影响
+- 当前不支持 LLM 自动选择工具，ReAct 在下一 Phase
+
+### Calculator 安全限制
+
+calculator_tool 使用 AST 白名单解析，确保安全：
+
+- **禁止** eval()、exec()
+- **禁止** 函数调用（如 print()、__import__()）
+- **禁止** 变量/名称访问（如 x + 1）
+- **禁止** 属性访问（如 1 .__class__）
+- **允许** 数字字面量和基础算术运算符：+ - * / ** % ()
+- 表达式长度限制 200 字符
+- 除零返回清晰错误
+
+### Tool AuditLog 说明
+
+每次工具调用写入 AuditLog：
+
+- action: `tool.invoke`
+- resource_type: `tool`
+- metadata 包含：trace_id、tool_name、input_summary、status、latency_ms、error（如有）
+
+## Web UI Tool Panel 使用说明
+
+1. 左侧边栏显示 Tool Panel
+2. 下拉选择工具
+3. 输入 JSON 参数（如 `{"text": "hello"}`）
+4. 点击 "Invoke" 按钮
+5. 查看工具返回结果（成功/错误、输出、延迟）
+6. 也可在聊天框中使用 `/tool` 命令调用工具
 
 ## 技术栈
 
@@ -53,21 +165,20 @@ enterprise-ai-agent/
 │   ├── core/                   # 配置、日志、错误处理
 │   ├── db/                     # 数据库模型、Repository
 │   ├── llm/                    # LLM Provider
-│   │   ├── base.py             # BaseLLMProvider ABC
-│   │   ├── fake.py             # FakeLLMProvider
-│   │   ├── external.py         # OpenAILLMProvider 占位
-│   │   └── provider.py         # get_llm_provider 工厂函数
 │   ├── rag/                    # RAG 组件
-│   │   ├── embeddings.py       # Embedding Provider（含工厂函数）
-│   │   ├── retriever.py         # Retriever（pgvector + Python fallback）
-│   │   ├── chunking.py         # 文本切分
-│   │   └── loaders.py          # 文档加载
 │   ├── schemas/                # Pydantic Schema
-│   │   └── services/               # 业务逻辑
+│   ├── services/               # 业务逻辑
+│   └── tools/                  # 工具模块
+│       ├── base.py             # BaseTool ABC
+│       ├── schemas.py          # ToolResult, ToolInfo 等
+│       ├── registry.py         # ToolRegistry
+│       ├── builtin.py          # 内置工具实现
+│       └── service.py          # ToolService
 ├── frontend/                   # 前端应用
 │   ├── src/
 │   │   ├── api/client.ts       # API 客户端
 │   │   ├── components/         # React 组件
+│   │   │   └── ToolPanel.tsx   # 工具面板组件
 │   │   ├── App.tsx             # 主应用
 │   │   ├── types.ts            # TypeScript 类型
 │   │   └── styles.css          # 样式
@@ -109,9 +220,9 @@ enterprise-ai-agent/
 ### Provider 配置说明
 
 - **`LLM_PROVIDER=fake`**（默认）：使用 FakeLLMProvider，不访问网络，输出稳定。适用于开发和测试。
-- **`LLM_PROVIDER=openai`**：使用 OpenAILLMProvider 占位。当前版本仅抛出 NotImplementedError，不进行网络调用。未来版本将接入真实 OpenAI API。
-- **`EMBEDDING_PROVIDER=fake`**（默认）：使用 FakeEmbeddingProvider，基于 SHA-256 hash 的确定性向量，不访问网络。适用于开发和测试。
-- **`EMBEDDING_PROVIDER=openai`**：使用 OpenAIEmbeddingProvider 占位。当前版本仅抛出 NotImplementedError，不进行网络调用。未来版本将接入真实 OpenAI Embedding API。
+- **`LLM_PROVIDER=openai`**：使用 OpenAILLMProvider 占位。当前版本仅抛出 NotImplementedError，不进行网络调用。
+- **`EMBEDDING_PROVIDER=fake`**（默认）：使用 FakeEmbeddingProvider，基于 SHA-256 hash 的确定性向量，不访问网络。
+- **`EMBEDDING_PROVIDER=openai`**：使用 OpenAIEmbeddingProvider 占位。当前版本仅抛出 NotImplementedError，不进行网络调用。
 
 **注意**：真实 Provider（OpenAI）目前只是接口占位，不会进行任何网络调用。测试环境必须使用 fake provider。
 
@@ -119,8 +230,8 @@ enterprise-ai-agent/
 
 Retriever 根据数据库类型自动选择检索路径：
 
-- **PostgreSQL + pgvector**：使用 pgvector 原生 `<=>` cosine distance 操作符进行向量检索，score = 1 - distance。性能优于 Python 计算。
-- **SQLite（测试环境）**：使用 Python 层 cosine similarity 计算。兼容 SQLite，不依赖 pgvector。
+- **PostgreSQL + pgvector**：使用 pgvector 原生 `<=>` cosine distance 操作符进行向量检索，score = 1 - distance。
+- **SQLite（测试环境）**：使用 Python 层 cosine similarity 计算。
 
 数据库差异封装在 Retriever 内部，route/service/agent 层不感知数据库类型。
 
@@ -134,17 +245,11 @@ Retriever 根据数据库类型自动选择检索路径：
 2. 选择 "Codespaces" 标签
 3. 点击 "Create codespace on main"
 
-### Codespace 配置
-
-Codespace 会自动配置开发环境，包括 Python 3.12、Node.js 20、Docker 和 Docker Compose。
-
 ### 端口转发
 
 Codespaces 会自动转发以下端口：
 - **8000** - 后端 API
 - **5173** - 前端 Web UI
-
-在 Codespaces 的 "Ports" 标签中查看转发 URL。
 
 ### Codespaces pgvector 验证步骤
 
@@ -160,135 +265,30 @@ Codespaces 会自动转发以下端口：
    ```bash
    docker compose exec postgres psql -U postgres -d enterprise_ai_agent -c "SELECT COUNT(*) FROM document_chunks WHERE embedding IS NOT NULL;"
    ```
-4. 使用 psql 执行 pgvector cosine distance 查询（从已有 chunk 取 embedding 作为 query vector）：
-   ```bash
-   docker compose exec postgres psql -U postgres -d enterprise_ai_agent -c "SELECT id, 1 - (embedding <=> (SELECT embedding FROM document_chunks LIMIT 1)) AS score FROM document_chunks WHERE embedding IS NOT NULL ORDER BY embedding <=> (SELECT embedding FROM document_chunks LIMIT 1) LIMIT 5;"
-   ```
 
 ## 后端启动方式
 
-### 1. 复制环境变量
-
 ```bash
 cp .env.example .env
-```
-
-### 2. 启动 PostgreSQL 和 Redis
-
-```bash
 docker compose up -d postgres redis
-```
-
-### 3. 执行数据库迁移
-
-```bash
 uv run alembic upgrade head
-```
-
-### 4. 启动后端
-
-```bash
 uv run uvicorn app.main:app --host 0.0.0.0 --port 8000
-```
-
-### 5. 验证
-
-```bash
-curl http://localhost:8000/health
 ```
 
 ## 前端启动方式
 
-### 开发模式
-
 ```bash
 cd frontend
 npm install
 npm run dev
-```
-
-前端默认运行在 http://localhost:5173，API 请求代理到 http://localhost:8000。
-
-### 生产构建
-
-```bash
-cd frontend
-npm run build
 ```
 
 ## Docker Compose 启动方式
 
-一键启动所有服务（API + Frontend + PostgreSQL + Redis）：
-
 ```bash
 cp .env.example .env
 docker compose up -d --build
-```
-
-查看服务状态：
-
-```bash
 docker compose ps
-```
-
-应看到 4 个服务：api、frontend、postgres、redis。
-
-### 访问服务
-
-- **前端 Web UI**：http://localhost:5173
-- **后端 API**：http://localhost:8000
-- **API 文档**：http://localhost:8000/docs
-
-**Codespaces 中**：使用 Ports 标签中显示的转发 URL。
-
-## 数据库迁移
-
-```bash
-# 执行迁移
-uv run alembic upgrade head
-
-# 查看当前版本
-uv run alembic current
-
-# 创建新迁移
-uv run alembic revision --autogenerate -m "description"
-```
-
-## 后端测试命令
-
-```bash
-# 运行所有测试
-uv run pytest -q
-
-# 运行特定测试
-uv run pytest tests/test_health.py
-
-# Lint 检查
-uv run ruff check .
-
-# 格式检查
-uv run ruff format --check .
-
-# 类型检查
-uv run mypy app
-```
-
-## 前端 Lint/Build 命令
-
-```bash
-cd frontend
-
-# 安装依赖
-npm install
-
-# Lint 检查
-npm run lint
-
-# 生产构建
-npm run build
-
-# 开发服务器
-npm run dev
 ```
 
 ## API 简介
@@ -309,7 +309,7 @@ npm run dev
 | GET | `/api/chat/sessions` | 列出聊天会话 |
 | GET | `/api/chat/sessions/{session_id}` | 获取单个会话 |
 | GET | `/api/chat/sessions/{session_id}/messages` | 获取消息列表 |
-| POST | `/api/chat/sessions/{session_id}/messages` | 发送消息（RAG 问答） |
+| POST | `/api/chat/sessions/{session_id}/messages` | 发送消息（RAG 问答或 /tool 调用） |
 
 ### Document API
 
@@ -321,6 +321,13 @@ npm run dev
 | GET | `/api/documents/{document_id}/chunks` | 获取文档 chunks |
 | DELETE | `/api/documents/{document_id}` | 删除文档 |
 
+### Tool API
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/api/tools` | 列出可用工具 |
+| POST | `/api/tools/{tool_name}/invoke` | 调用工具 |
+
 ## Web UI 使用步骤
 
 1. 打开前端页面（http://localhost:5173 或 Codespaces 转发 URL）
@@ -328,16 +335,15 @@ npm run dev
 3. 左侧边栏：
    - **Upload Document**：上传 .txt 或 .md 文件
    - **Documents**：查看已上传文档列表，支持删除
+   - **Tool Panel**：选择并调用工具，查看结果
    - **Sessions**：创建或选择聊天会话
 4. 右侧聊天区域：
    - 选择会话后显示消息历史
-   - 输入问题并发送
+   - 输入问题并发送（RAG 问答）
+   - 输入 `/tool <name> <json>` 调用工具
    - 查看 assistant 回答和 citations
-5. Citations 显示在聊天区域下方，包含 document_title、chunk_index、score、snippet
 
 ## 手动端到端验收流程
-
-### 前置条件
 
 在 GitHub Codespaces 中：
 
@@ -346,57 +352,41 @@ cp .env.example .env
 docker compose up -d --build
 ```
 
-等待所有服务启动完成（约 30-60 秒）。
-
-### 验收步骤
-
 1. 打开 Codespaces frontend 转发端口 URL
 2. 确认页面顶部显示 "API Online"
-3. 在左侧 "Upload Document" 区域上传一个 .txt 或 .md 文件
-4. 确认文档列表出现该文档，status 显示为 "ready"
-5. 点击 "+ New" 按钮创建一个 chat session
-6. 点击新创建的 session
-7. 在聊天输入框中输入与上传文档相关的问题（如"这个项目支持哪些 API？"）
-8. 点击 Send 发送
-9. 确认页面显示 assistant answer
-10. 确认页面显示 citations（包含 document_title、chunk_index、score、snippet）
-11. 刷新页面（F5）
-12. 确认 session 列表仍存在
-13. 重新选择 session
-14. 确认消息历史仍存在
-15. 在文档列表中点击 "Delete" 删除文档
-16. 确认文档列表不再显示该文档
-
-### API 直接验证
-
-```bash
-curl http://localhost:8000/health
-```
+3. 确认文档上传仍可用
+4. 确认普通 RAG chat 仍可用
+5. 确认 Tool Panel 显示工具列表
+6. 在 Tool Panel 调用 echo_tool
+7. 在 Tool Panel 调用 calculator_tool
+8. 在 Chat 输入框输入：`/tool echo_tool {"text":"hello"}`
+9. 确认 assistant message 显示工具结果
+10. 在 Chat 输入框输入：`/tool calculator_tool {"expression":"1+2*3"}`
+11. 确认 assistant message 显示计算结果
+12. 输入普通问题，确认仍走 RAG 并返回 citations
 
 ## v0.2 已知限制
 
-- **Fake LLM**：默认使用 FakeLLMProvider，不访问真实 LLM API，输出为固定格式
-- **Fake Embedding**：默认使用 FakeEmbeddingProvider，基于 SHA-256 hash 的确定性向量，不是语义检索
-- **OpenAI Provider 占位**：OpenAILLMProvider 和 OpenAIEmbeddingProvider 仅抛出 NotImplementedError，不进行网络调用
-- **无认证**：当前无用户认证系统，使用 demo user
+- **Fake LLM**：默认使用 FakeLLMProvider，不访问真实 LLM API
+- **Fake Embedding**：基于 SHA-256 hash 的确定性向量，不是语义检索
+- **OpenAI Provider 占位**：仅抛出 NotImplementedError
+- **无认证**：当前无用户认证系统
 - **无权限**：当前无权限管理
 - **无 MCP**：未实现 Model Context Protocol
-- **无 Tool Calling**：未实现工具调用
-- **无 ReAct / Plan-and-Execute**：未实现复杂 Agent 架构
+- **无 ReAct**：当前 /tool 是简单命令触发，不支持 LLM 自动选择工具或多步循环
 - **仅支持 .txt/.md**：不支持 PDF、DOCX 等文档格式
 - **无流式输出**：Chat API 不支持 SSE 流式响应
 
 ## v0.3 建议方向
 
 1. 接入真实 LLM（如 OpenAI API）
-2. 接入真实 Embedding Provider
+2. 实现 ReAct 循环（LLM 自动选择工具）
 3. 实现用户认证和授权
 4. 支持 PDF、DOCX 文档格式
 5. 实现 SSE 流式输出
-6. 实现 ReAct / Tool Calling
-7. 实现 MCP
-8. 实现多租户
-9. 实现 Admin Dashboard
+6. 实现 MCP
+7. 实现多租户
+8. 实现 Admin Dashboard
 
 ## 许可证
 

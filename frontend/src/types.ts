@@ -62,3 +62,25 @@ export interface DocumentListResponse {
   documents: Document[]
   total: number
 }
+
+// Tool types
+export interface ToolInfo {
+  name: string
+  description: string
+  input_schema: Record<string, unknown>
+  requires_confirmation: boolean
+}
+
+export interface ToolListResponse {
+  tools: ToolInfo[]
+  total: number
+}
+
+export interface ToolInvokeResponse {
+  tool_name: string
+  status: string
+  output: Record<string, unknown> | null
+  error: string | null
+  latency_ms: number
+  trace_id: string
+}

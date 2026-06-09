@@ -6,6 +6,7 @@ import { CitationList } from './components/CitationList'
 import { DocumentList } from './components/DocumentList'
 import { DocumentUpload } from './components/DocumentUpload'
 import { HealthStatus } from './components/HealthStatus'
+import { ToolPanel } from './components/ToolPanel'
 import type { Document, Message, SendMessageResponse, Session } from './types'
 
 export default function App() {
@@ -109,6 +110,9 @@ export default function App() {
             />
           </div>
           <div className="sidebar-section">
+            <ToolPanel onError={(msg) => setError(msg)} />
+          </div>
+          <div className="sidebar-section">
             <ChatSessionList
               sessions={sessions}
               selectedId={selectedSessionId}
@@ -130,6 +134,7 @@ export default function App() {
           ) : (
             <div className="chat-placeholder">
               <p>Select or create a session to start chatting.</p>
+              <p className="hint">Use /tool &lt;name&gt; &lt;json&gt; in chat to invoke tools.</p>
             </div>
           )}
 

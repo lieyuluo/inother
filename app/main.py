@@ -12,6 +12,7 @@ from starlette.responses import Response
 from app.api.routes_chat import router as chat_router
 from app.api.routes_documents import router as documents_router
 from app.api.routes_health import router as health_router
+from app.api.routes_tools import router as tools_router
 from app.core.config import get_settings
 from app.core.errors import AppException, app_exception_handler, http_exception_handler
 from app.core.logging import get_logger, setup_logging
@@ -74,6 +75,7 @@ def create_app() -> FastAPI:
     app.include_router(health_router)
     app.include_router(chat_router)
     app.include_router(documents_router)
+    app.include_router(tools_router)
 
     return app
 
