@@ -1,9 +1,9 @@
 """Embedding providers for generating vector embeddings."""
 
-from abc import ABC, abstractmethod
-from typing import Protocol
 import hashlib
 import struct
+from abc import ABC, abstractmethod
+from typing import Protocol
 
 
 class EmbeddingProvider(Protocol):
@@ -106,9 +106,7 @@ class FakeEmbeddingProvider(BaseEmbeddingProvider):
         # Generate dimension values
         for i in range(self._dimension):
             # Create variation based on position and seed
-            value_hash = hashlib.sha256(
-                struct.pack(">QI", seed, i)
-            ).digest()
+            value_hash = hashlib.sha256(struct.pack(">QI", seed, i)).digest()
 
             # Convert first 4 bytes to float in range [-1, 1]
             int_value = int.from_bytes(value_hash[:4], byteorder="big")

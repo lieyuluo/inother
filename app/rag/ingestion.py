@@ -1,12 +1,13 @@
 """Document ingestion pipeline for RAG."""
 
+import hashlib  # Import needed for content_hash
 from uuid import UUID, uuid4
 
 from app.core.config import get_settings
 from app.db.models import Document, DocumentChunk
 from app.rag.chunking import TextChunker
 from app.rag.embeddings import EmbeddingProvider, FakeEmbeddingProvider
-from app.rag.loaders import DocumentLoader, get_loader_for_extension, is_supported_extension
+from app.rag.loaders import get_loader_for_extension, is_supported_extension
 
 
 class IngestionPipeline:
@@ -157,6 +158,3 @@ class IngestionPipeline:
         text = self.load_content(content, filename)
         chunks = self.chunker.chunk(text)
         return len(chunks)
-
-
-import hashlib  # Import needed for content_hash

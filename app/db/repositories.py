@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID, uuid4
 
-from sqlalchemy import asc, desc, select, func
+from sqlalchemy import asc, desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import ChatMessage, ChatSession, Document, DocumentChunk, User
@@ -381,8 +381,6 @@ class DocumentChunkRepository:
         Returns:
             Count of chunks
         """
-        stmt = select(func.count(DocumentChunk.id)).where(
-            DocumentChunk.document_id == document_id
-        )
+        stmt = select(func.count(DocumentChunk.id)).where(DocumentChunk.document_id == document_id)
         result = await self.session.execute(stmt)
         return result.scalar_one() or 0

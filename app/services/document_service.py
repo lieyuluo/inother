@@ -38,9 +38,7 @@ class DocumentService:
             chunk_size=settings.rag_chunk_size,
             chunk_overlap=settings.rag_chunk_overlap,
         )
-        self.embedding_provider = FakeEmbeddingProvider(
-            dimension=settings.embedding_dimension
-        )
+        self.embedding_provider = FakeEmbeddingProvider(dimension=settings.embedding_dimension)
 
     async def upload_document(
         self,
@@ -103,13 +101,15 @@ class DocumentService:
             for i, chunk_text in enumerate(chunks):
                 embedding = self.embedding_provider.embed(chunk_text)
                 token_count = self.chunker.estimate_token_count(chunk_text)
-                chunks_data.append({
-                    "document_id": document.id,
-                    "chunk_index": i,
-                    "content": chunk_text,
-                    "embedding": embedding,
-                    "token_count": token_count,
-                })
+                chunks_data.append(
+                    {
+                        "document_id": document.id,
+                        "chunk_index": i,
+                        "content": chunk_text,
+                        "embedding": embedding,
+                        "token_count": token_count,
+                    }
+                )
 
             await self.chunk_repo.create_batch(chunks_data)
 

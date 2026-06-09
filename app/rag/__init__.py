@@ -2,7 +2,7 @@
 
 from app.rag.chunking import TextChunker
 from app.rag.embeddings import EmbeddingProvider, FakeEmbeddingProvider
-from app.rag.loaders import DocumentLoader, TextLoader, MarkdownLoader
+from app.rag.loaders import DocumentLoader, MarkdownLoader, TextLoader
 
 __all__ = [
     "DocumentLoader",

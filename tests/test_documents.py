@@ -3,7 +3,6 @@
 import io
 from uuid import uuid4
 
-import pytest
 from fastapi.testclient import TestClient
 
 from app.rag.chunking import TextChunker
@@ -17,12 +16,12 @@ class TestUploadDocument:
         """Test uploading a .txt file successfully."""
         content = b"This is a test document content."
         file = io.BytesIO(content)
-        
+
         response = client.post(
             "/api/documents/upload",
             files={"file": ("test.txt", file, "text/plain")},
         )
-        
+
         assert response.status_code == 201
         data = response.json()
         assert "document" in data
@@ -35,12 +34,12 @@ class TestUploadDocument:
         """Test uploading a .md file successfully."""
         content = b"# Test Markdown\n\nThis is markdown content."
         file = io.BytesIO(content)
-        
+
         response = client.post(
             "/api/documents/upload",
             files={"file": ("test.md", file, "text/markdown")},
         )
-        
+
         assert response.status_code == 201
         data = response.json()
         assert data["document"]["filename"] == "test.md"
@@ -51,36 +50,36 @@ class TestUploadDocument:
         """Test uploading unsupported file type returns 400."""
         content = b"PDF content placeholder"
         file = io.BytesIO(content)
-        
+
         response = client.post(
             "/api/documents/upload",
             files={"file": ("test.pdf", file, "application/pdf")},
         )
-        
+
         assert response.status_code == 400
         assert "Unsupported file type" in response.json()["detail"]
 
     def test_upload_empty_file_returns_400(self, client: TestClient) -> None:
         """Test uploading empty file returns 400."""
         file = io.BytesIO(b"")
-        
+
         response = client.post(
             "/api/documents/upload",
             files={"file": ("empty.txt", file, "text/plain")},
         )
-        
+
         assert response.status_code == 400
 
     def test_upload_creates_document_record(self, client: TestClient) -> None:
         """Test that upload creates a Document record."""
         content = b"Test content for document creation."
         file = io.BytesIO(content)
-        
+
         response = client.post(
             "/api/documents/upload",
             files={"file": ("create.txt", file, "text/plain")},
         )
-        
+
         assert response.status_code == 201
         data = response.json()
         assert "id" in data["document"]
@@ -90,12 +89,12 @@ class TestUploadDocument:
         """Test that upload creates DocumentChunk records."""
         content = b"Test content that will be chunked."
         file = io.BytesIO(content)
-        
+
         response = client.post(
             "/api/documents/upload",
             files={"file": ("chunks.txt", file, "text/plain")},
         )
-        
+
         assert response.status_code == 201
         data = response.json()
         assert data["chunks_count"] >= 1
@@ -104,12 +103,12 @@ class TestUploadDocument:
         """Test that successful upload sets status to 'ready'."""
         content = b"Content for status test."
         file = io.BytesIO(content)
-        
+
         response = client.post(
             "/api/documents/upload",
             files={"file": ("status.txt", file, "text/plain")},
         )
-        
+
         assert response.status_code == 201
         data = response.json()
         assert data["document"]["status"] == "ready"
@@ -118,13 +117,13 @@ class TestUploadDocument:
         """Test uploading with custom title."""
         content = b"Content with custom title."
         file = io.BytesIO(content)
-        
+
         response = client.post(
             "/api/documents/upload",
             files={"file": ("file.txt", file, "text/plain")},
             data={"title": "Custom Title"},
         )
-        
+
         assert response.status_code == 201
         data = response.json()
         assert data["document"]["title"] == "Custom Title"
@@ -142,9 +141,9 @@ class TestListDocuments:
             "/api/documents/upload",
             files={"file": ("list.txt", file, "text/plain")},
         )
-        
+
         response = client.get("/api/documents")
-        
+
         assert response.status_code == 200
         data = response.json()
         assert "documents" in data
@@ -154,7 +153,7 @@ class TestListDocuments:
     def test_list_documents_empty(self, client: TestClient) -> None:
         """Test listing documents structure when empty."""
         response = client.get("/api/documents")
-        
+
         assert response.status_code == 200
         data = response.json()
         assert "documents" in data
@@ -174,10 +173,10 @@ class TestGetDocument:
             files={"file": ("get.txt", file, "text/plain")},
         )
         document_id = upload_response.json()["document"]["id"]
-        
+
         # Get document
         response = client.get(f"/api/documents/{document_id}")
-        
+
         assert response.status_code == 200
         data = response.json()
         assert data["id"] == document_id
@@ -186,7 +185,7 @@ class TestGetDocument:
         """Test getting non-existent document returns 404."""
         fake_id = str(uuid4())
         response = client.get(f"/api/documents/{fake_id}")
-        
+
         assert response.status_code == 404
 
 
@@ -203,10 +202,10 @@ class TestGetDocumentChunks:
             files={"file": ("chunks.txt", file, "text/plain")},
         )
         document_id = upload_response.json()["document"]["id"]
-        
+
         # Get chunks
         response = client.get(f"/api/documents/{document_id}/chunks")
-        
+
         assert response.status_code == 200
         data = response.json()
         assert "chunks" in data
@@ -217,7 +216,7 @@ class TestGetDocumentChunks:
         """Test getting chunks for non-existent document returns 404."""
         fake_id = str(uuid4())
         response = client.get(f"/api/documents/{fake_id}/chunks")
-        
+
         assert response.status_code == 404
 
 
@@ -234,17 +233,17 @@ class TestDeleteDocument:
             files={"file": ("delete.txt", file, "text/plain")},
         )
         document_id = upload_response.json()["document"]["id"]
-        
+
         # Delete
         response = client.delete(f"/api/documents/{document_id}")
-        
+
         assert response.status_code == 204
 
     def test_delete_document_not_found(self, client: TestClient) -> None:
         """Test deleting non-existent document returns 404."""
         fake_id = str(uuid4())
         response = client.delete(f"/api/documents/{fake_id}")
-        
+
         assert response.status_code == 404
 
     def test_deleted_document_not_in_list(self, client: TestClient) -> None:
@@ -257,18 +256,18 @@ class TestDeleteDocument:
             files={"file": ("delete_verify.txt", file, "text/plain")},
         )
         document_id = upload_response.json()["document"]["id"]
-        
+
         # Get initial count
         list_response = client.get("/api/documents")
         initial_count = list_response.json()["total"]
-        
+
         # Delete
         client.delete(f"/api/documents/{document_id}")
-        
+
         # Get new count
         new_response = client.get("/api/documents")
         new_count = new_response.json()["total"]
-        
+
         assert new_count < initial_count
 
     def test_get_deleted_document_returns_404(self, client: TestClient) -> None:
@@ -281,13 +280,13 @@ class TestDeleteDocument:
             files={"file": ("404_test.txt", file, "text/plain")},
         )
         document_id = upload_response.json()["document"]["id"]
-        
+
         # Delete
         client.delete(f"/api/documents/{document_id}")
-        
+
         # Try to get
         response = client.get(f"/api/documents/{document_id}")
-        
+
         assert response.status_code == 404
 
 
@@ -298,9 +297,9 @@ class TestChunking:
         """Test that short text produces at least 1 chunk."""
         chunker = TextChunker(chunk_size=800, chunk_overlap=100)
         text = "This is a short text."
-        
+
         chunks = chunker.chunk(text)
-        
+
         assert len(chunks) >= 1
         assert chunks[0] == text
 
@@ -308,33 +307,33 @@ class TestChunking:
         """Test that long text produces multiple chunks."""
         chunker = TextChunker(chunk_size=100, chunk_overlap=20)
         text = "This is a longer text that should be split into multiple chunks. " * 10
-        
+
         chunks = chunker.chunk(text)
-        
+
         assert len(chunks) >= 2
 
     def test_chunk_index_starts_at_zero(self, client: TestClient) -> None:
         """Test that chunk_index starts at 0."""
         content = b"Content for chunk index test."
         file = io.BytesIO(content)
-        
+
         upload_response = client.post(
             "/api/documents/upload",
             files={"file": ("index.txt", file, "text/plain")},
         )
         document_id = upload_response.json()["document"]["id"]
-        
+
         chunks_response = client.get(f"/api/documents/{document_id}/chunks")
         chunks = chunks_response.json()["chunks"]
-        
+
         assert chunks[0]["chunk_index"] == 0
 
     def test_empty_text_returns_empty_list(self) -> None:
         """Test that empty text returns empty list."""
         chunker = TextChunker()
-        
+
         chunks = chunker.chunk("")
-        
+
         assert len(chunks) == 0
 
 
@@ -345,37 +344,37 @@ class TestFakeEmbeddingProvider:
         """Test that same text produces same embedding."""
         provider = FakeEmbeddingProvider(dimension=1536)
         text = "Test text for embedding"
-        
+
         embedding1 = provider.embed(text)
         embedding2 = provider.embed(text)
-        
+
         assert embedding1 == embedding2
 
     def test_embedding_dimension_correct(self) -> None:
         """Test that embedding dimension is correct."""
         provider = FakeEmbeddingProvider(dimension=1536)
         text = "Test text"
-        
+
         embedding = provider.embed(text)
-        
+
         assert len(embedding) == 1536
 
     def test_different_text_different_embedding(self) -> None:
         """Test that different texts produce different embeddings."""
         provider = FakeEmbeddingProvider(dimension=1536)
-        
+
         embedding1 = provider.embed("First text")
         embedding2 = provider.embed("Second text")
-        
+
         assert embedding1 != embedding2
 
     def test_embedding_values_in_range(self) -> None:
         """Test that embedding values are in valid range."""
         provider = FakeEmbeddingProvider(dimension=100)
         text = "Test text"
-        
+
         embedding = provider.embed(text)
-        
+
         for value in embedding:
             assert -1.0 <= value <= 1.0
 
@@ -383,9 +382,9 @@ class TestFakeEmbeddingProvider:
         """Test that custom dimension works."""
         provider = FakeEmbeddingProvider(dimension=384)
         text = "Test text"
-        
+
         embedding = provider.embed(text)
-        
+
         assert len(embedding) == 384
 
 
@@ -401,22 +400,22 @@ class TestIntegration:
             "/api/documents/upload",
             files={"file": ("workflow.txt", file, "text/plain")},
         )
-        
+
         assert upload_response.status_code == 201
         document_id = upload_response.json()["document"]["id"]
-        
+
         # Get document
         get_response = client.get(f"/api/documents/{document_id}")
         assert get_response.status_code == 200
-        
+
         # Get chunks
         chunks_response = client.get(f"/api/documents/{document_id}/chunks")
         assert chunks_response.status_code == 200
-        
+
         # Delete
         delete_response = client.delete(f"/api/documents/{document_id}")
         assert delete_response.status_code == 204
-        
+
         # Verify deleted
         verify_response = client.get(f"/api/documents/{document_id}")
         assert verify_response.status_code == 404
