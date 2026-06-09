@@ -11,6 +11,7 @@ Tools:
 import ast
 import operator
 import time
+from collections.abc import Callable
 from uuid import uuid4
 
 from sqlalchemy import select
@@ -61,7 +62,7 @@ class EchoTool(BaseTool):
 
 
 # AST node whitelist for safe arithmetic evaluation
-_SAFE_OPERATORS = {
+_SAFE_OPERATORS: dict[type[ast.AST], Callable[..., int | float]] = {
     ast.Add: operator.add,
     ast.Sub: operator.sub,
     ast.Mult: operator.mul,
@@ -183,20 +184,20 @@ class CalculatorTool(BaseTool):
             raise ValueError(f"Unsupported constant type: {type(node.value).__name__}")
 
         if isinstance(node, ast.UnaryOp):
-            op_type = type(node.op)
+            op_type: type[ast.AST] = type(node.op)
             if op_type not in _SAFE_OPERATORS:
                 raise ValueError(f"Unsupported unary operator: {op_type.__name__}")
             operand = self._eval_node(node.operand)
             return _SAFE_OPERATORS[op_type](operand)
 
         if isinstance(node, ast.BinOp):
-            op_type = type(node.op)
-            if op_type not in _SAFE_OPERATORS:
-                raise ValueError(f"Unsupported binary operator: {op_type.__name__}")
+            op_type2: type[ast.AST] = type(node.op)
+            if op_type2 not in _SAFE_OPERATORS:
+                raise ValueError(f"Unsupported binary operator: {op_type2.__name__}")
             left = self._eval_node(node.left)
             right = self._eval_node(node.right)
             try:
-                return _SAFE_OPERATORS[op_type](left, right)
+                return _SAFE_OPERATORS[op_type2](left, right)
             except ZeroDivisionError:
                 raise ZeroDivisionError("Division by zero") from None
 
@@ -247,7 +248,7 @@ class SearchDocumentsTool(BaseTool):
         try:
             retriever = Retriever(
                 session=self._db_session,
-                top_k=int(top_k) if top_k is not None else None,
+                top_k=int(top_k) if isinstance(top_k, (int, float)) else None,
             )
             results = await retriever.similarity_search(str(query))
 

@@ -136,8 +136,8 @@ class ToolService:
             Error message if validation fails, None if valid.
         """
         schema = tool.input_schema
-        required_fields = schema.get("required", [])
-        properties = schema.get("properties", {})
+        required_fields: list[str] = schema.get("required", [])  # type: ignore[assignment]
+        properties: dict[str, object] = schema.get("properties", {})  # type: ignore[assignment]
 
         # Check required fields
         for field_name in required_fields:
