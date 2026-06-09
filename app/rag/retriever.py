@@ -64,7 +64,10 @@ class Retriever:
         )
         self.top_k = top_k or settings.rag_top_k
         self.snippet_max_length = snippet_max_length or settings.rag_snippet_max_length
-        self._use_pgvector = settings.is_pgvector_available()
+        # Detect database type from the actual session engine, not from settings.
+        # This ensures SQLite test sessions always use Python cosine fallback,
+        # even if settings.DATABASE_URL points to PostgreSQL.
+        self._use_pgvector = self._detect_pgvector(session)
 
     async def similarity_search(self, query: str) -> list[RetrievalResult]:
         """Search for document chunks similar to the query.
@@ -83,6 +86,25 @@ class Retriever:
             return await self._pgvector_search(query_embedding)
         else:
             return await self._python_cosine_search(query_embedding)
+
+    @staticmethod
+    def _detect_pgvector(session: AsyncSession) -> bool:
+        """Detect if the session is connected to PostgreSQL with pgvector.
+
+        Checks the actual engine dialect of the session, not the settings.
+        This ensures SQLite test sessions always use Python cosine fallback.
+
+        Args:
+            session: Async database session.
+
+        Returns:
+            True if the session uses PostgreSQL engine.
+        """
+        bind = session.get_bind()
+        if bind is None:
+            return False
+        dialect = bind.dialect
+        return dialect.name == "postgresql"
 
     async def _pgvector_search(self, query_embedding: list[float]) -> list[RetrievalResult]:
         """Search using pgvector native cosine distance query.
