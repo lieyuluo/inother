@@ -4,8 +4,16 @@ from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.repositories import ChatMessageRepository, ChatSessionRepository, UserRepository
+from app.agents.rag_agent import RAGAgent
+from app.agents.schemas import Citation
+from app.db.repositories import (
+    AuditLogRepository,
+    ChatMessageRepository,
+    ChatSessionRepository,
+    UserRepository,
+)
 from app.schemas.chat import (
+    CitationResponse,
     MessageListResponse,
     MessageResponse,
     SendMessageResponse,
@@ -22,6 +30,7 @@ class ChatService:
         self.user_repo = UserRepository(session)
         self.session_repo = ChatSessionRepository(session)
         self.message_repo = ChatMessageRepository(session)
+        self.audit_repo = AuditLogRepository(session)
 
     async def create_session(self, title: str | None = None) -> SessionResponse:
         """Create a new chat session.
@@ -133,7 +142,7 @@ class ChatService:
         session_id: UUID,
         content: str,
     ) -> SendMessageResponse | None:
-        """Send a message to a session and get mock assistant response.
+        """Send a message to a session and get RAG-powered assistant response.
 
         Returns None if session doesn't exist.
         """
@@ -149,14 +158,35 @@ class ChatService:
             content=content,
         )
 
-        # Generate mock assistant response
-        assistant_content = self._generate_mock_response(content)
+        # Run RAG Agent
+        agent = RAGAgent(session=self.session)
+        result = await agent.query(content)
 
-        # Create assistant message
+        # Create assistant message with citations metadata
+        assistant_metadata = {
+            "citations": [_citation_to_dict(c) for c in result.citations],
+            "trace_id": result.trace_id,
+        }
         assistant_message = await self.message_repo.create(
             session_id=session_id,
             role="assistant",
-            content=assistant_content,
+            content=result.answer,
+            metadata=assistant_metadata,
+        )
+
+        # Write AuditLog
+        await self.audit_repo.create(
+            action="rag.query",
+            actor="system",
+            resource_type="chat_session",
+            resource_id=session_id,
+            metadata={
+                "trace_id": result.trace_id,
+                "query": content,
+                "top_k": agent.retriever.top_k,
+                "citations_count": len(result.citations),
+                "used_fallback": result.used_fallback,
+            },
         )
 
         return SendMessageResponse(
@@ -176,15 +206,28 @@ class ChatService:
                 token_count=assistant_message.token_count,
                 created_at=assistant_message.created_at,
             ),
+            citations=[
+                CitationResponse(
+                    document_id=c.document_id,
+                    document_title=c.document_title,
+                    chunk_id=c.chunk_id,
+                    chunk_index=c.chunk_index,
+                    score=c.score,
+                    snippet=c.snippet,
+                )
+                for c in result.citations
+            ],
+            trace_id=result.trace_id,
         )
 
-    def _generate_mock_response(self, user_content: str) -> str:
-        """Generate a mock assistant response.
 
-        This is a placeholder for Phase 2. In future phases, this will be replaced
-        with actual LLM integration.
-
-        The mock response format is stable and predictable for testing:
-        "Echo: {user_content}"
-        """
-        return f"Echo: {user_content}"
+def _citation_to_dict(citation: Citation) -> dict[str, object]:
+    """Convert a Citation to a dictionary for metadata storage."""
+    return {
+        "document_id": citation.document_id,
+        "document_title": citation.document_title,
+        "chunk_id": citation.chunk_id,
+        "chunk_index": citation.chunk_index,
+        "score": citation.score,
+        "snippet": citation.snippet,
+    }

@@ -7,7 +7,7 @@ from uuid import UUID, uuid4
 from sqlalchemy import asc, desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import ChatMessage, ChatSession, Document, DocumentChunk, User
+from app.db.models import AuditLog, ChatMessage, ChatSession, Document, DocumentChunk, User
 
 
 class UserRepository:
@@ -384,3 +384,45 @@ class DocumentChunkRepository:
         stmt = select(func.count(DocumentChunk.id)).where(DocumentChunk.document_id == document_id)
         result = await self.session.execute(stmt)
         return result.scalar_one() or 0
+
+
+class AuditLogRepository:
+    """Repository for AuditLog model operations."""
+
+    def __init__(self, session: AsyncSession) -> None:
+        self.session = session
+
+    async def create(
+        self,
+        action: str,
+        actor: str,
+        resource_type: str | None = None,
+        resource_id: UUID | None = None,
+        metadata: dict[str, Any] | None = None,
+        user_id: UUID | None = None,
+    ) -> AuditLog:
+        """Create an audit log entry.
+
+        Args:
+            action: Action name (e.g., 'rag.query').
+            actor: Actor identifier (e.g., 'system').
+            resource_type: Type of resource (e.g., 'chat_session').
+            resource_id: ID of the resource.
+            metadata: Additional metadata.
+            user_id: Optional user ID.
+
+        Returns:
+            Created AuditLog instance.
+        """
+        log = AuditLog(
+            id=uuid4(),
+            action=action,
+            actor=actor,
+            resource_type=resource_type,
+            resource_id=resource_id,
+            meta=metadata,
+            user_id=user_id,
+        )
+        self.session.add(log)
+        await self.session.flush()
+        return log

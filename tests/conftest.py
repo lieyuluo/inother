@@ -10,8 +10,15 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from sqlalchemy.pool import NullPool
 
 from app.db.base import Base
-from app.db.models import ChatMessage, ChatSession, User
-from app.db.repositories import ChatMessageRepository, ChatSessionRepository, UserRepository
+from app.db.models import ChatMessage, ChatSession, Document, DocumentChunk, User
+from app.db.repositories import (
+    AuditLogRepository,
+    ChatMessageRepository,
+    ChatSessionRepository,
+    DocumentChunkRepository,
+    DocumentRepository,
+    UserRepository,
+)
 from app.db.session import get_db_session
 from app.main import app
 
@@ -80,6 +87,24 @@ def message_repo(async_db_session: AsyncSession) -> ChatMessageRepository:
     return ChatMessageRepository(async_db_session)
 
 
+@pytest.fixture
+def document_repo(async_db_session: AsyncSession) -> DocumentRepository:
+    """Create a document repository."""
+    return DocumentRepository(async_db_session)
+
+
+@pytest.fixture
+def chunk_repo(async_db_session: AsyncSession) -> DocumentChunkRepository:
+    """Create a document chunk repository."""
+    return DocumentChunkRepository(async_db_session)
+
+
+@pytest.fixture
+def audit_repo(async_db_session: AsyncSession) -> AuditLogRepository:
+    """Create an audit log repository."""
+    return AuditLogRepository(async_db_session)
+
+
 @pytest_asyncio.fixture
 async def demo_user(async_db_session: AsyncSession) -> User:
     """Create a demo user for testing."""
@@ -139,3 +164,159 @@ async def test_messages(
     for msg in messages:
         await async_db_session.refresh(msg)
     return messages
+
+
+@pytest_asyncio.fixture
+async def ready_document(
+    async_db_session: AsyncSession,
+    demo_user: User,
+) -> Document:
+    """Create a ready document with chunks for RAG testing."""
+    from app.rag.embeddings import FakeEmbeddingProvider
+
+    document = Document(
+        id=uuid4(),
+        user_id=demo_user.id,
+        title="Test Document",
+        filename="test.txt",
+        file_type="txt",
+        file_size=100,
+        content_hash="abc123",
+        status="ready",
+    )
+    async_db_session.add(document)
+    await async_db_session.flush()
+
+    provider = FakeEmbeddingProvider(dimension=1536)
+    chunk_text = "This document describes the API endpoints for the enterprise AI agent system."
+    embedding = provider.embed(chunk_text)
+
+    chunk = DocumentChunk(
+        id=uuid4(),
+        document_id=document.id,
+        chunk_index=0,
+        content=chunk_text,
+        embedding=embedding,
+        token_count=10,
+    )
+    async_db_session.add(chunk)
+    await async_db_session.commit()
+    await async_db_session.refresh(document)
+    return document
+
+
+@pytest_asyncio.fixture
+async def deleted_document(
+    async_db_session: AsyncSession,
+    demo_user: User,
+) -> Document:
+    """Create a deleted document with chunks for RAG testing."""
+    from app.rag.embeddings import FakeEmbeddingProvider
+
+    document = Document(
+        id=uuid4(),
+        user_id=demo_user.id,
+        title="Deleted Document",
+        filename="deleted.txt",
+        file_type="txt",
+        file_size=100,
+        content_hash="def456",
+        status="deleted",
+    )
+    async_db_session.add(document)
+    await async_db_session.flush()
+
+    provider = FakeEmbeddingProvider(dimension=1536)
+    chunk_text = "This is content from a deleted document that should not appear in results."
+    embedding = provider.embed(chunk_text)
+
+    chunk = DocumentChunk(
+        id=uuid4(),
+        document_id=document.id,
+        chunk_index=0,
+        content=chunk_text,
+        embedding=embedding,
+        token_count=10,
+    )
+    async_db_session.add(chunk)
+    await async_db_session.commit()
+    await async_db_session.refresh(document)
+    return document
+
+
+@pytest_asyncio.fixture
+async def failed_document(
+    async_db_session: AsyncSession,
+    demo_user: User,
+) -> Document:
+    """Create a failed document with chunks for RAG testing."""
+    from app.rag.embeddings import FakeEmbeddingProvider
+
+    document = Document(
+        id=uuid4(),
+        user_id=demo_user.id,
+        title="Failed Document",
+        filename="failed.txt",
+        file_type="txt",
+        file_size=100,
+        content_hash="ghi789",
+        status="failed",
+    )
+    async_db_session.add(document)
+    await async_db_session.flush()
+
+    provider = FakeEmbeddingProvider(dimension=1536)
+    chunk_text = "This is content from a failed document that should not appear in results."
+    embedding = provider.embed(chunk_text)
+
+    chunk = DocumentChunk(
+        id=uuid4(),
+        document_id=document.id,
+        chunk_index=0,
+        content=chunk_text,
+        embedding=embedding,
+        token_count=10,
+    )
+    async_db_session.add(chunk)
+    await async_db_session.commit()
+    await async_db_session.refresh(document)
+    return document
+
+
+@pytest_asyncio.fixture
+async def processing_document(
+    async_db_session: AsyncSession,
+    demo_user: User,
+) -> Document:
+    """Create a processing document with chunks for RAG testing."""
+    from app.rag.embeddings import FakeEmbeddingProvider
+
+    document = Document(
+        id=uuid4(),
+        user_id=demo_user.id,
+        title="Processing Document",
+        filename="processing.txt",
+        file_type="txt",
+        file_size=100,
+        content_hash="jkl012",
+        status="processing",
+    )
+    async_db_session.add(document)
+    await async_db_session.flush()
+
+    provider = FakeEmbeddingProvider(dimension=1536)
+    chunk_text = "This is content from a processing document that should not appear in results."
+    embedding = provider.embed(chunk_text)
+
+    chunk = DocumentChunk(
+        id=uuid4(),
+        document_id=document.id,
+        chunk_index=0,
+        content=chunk_text,
+        embedding=embedding,
+        token_count=10,
+    )
+    async_db_session.add(chunk)
+    await async_db_session.commit()
+    await async_db_session.refresh(document)
+    return document

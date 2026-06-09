@@ -4,7 +4,7 @@
 
 ## 项目介绍
 
-Enterprise AI Agent 是一个企业级 AI Agent 后端服务，旨在提供可靠的 AI 对话、文档管理和 RAG（检索增强生成）功能。当前为 v0.1 版本，Phase 3 已实现文档上传、解析、切分和 Embedding 入库。
+Enterprise AI Agent 是一个企业级 AI Agent 后端服务，旨在提供可靠的 AI 对话、文档管理和 RAG（检索增强生成）功能。当前为 v0.1 版本，Phase 4 已实现 RAG 检索与问答 Agent。
 
 ## 技术栈
 
@@ -56,6 +56,8 @@ Codespace 会自动配置开发环境，包括：
 | `RAG_CHUNK_SIZE` | 文本切分大小 | `800` |
 | `RAG_CHUNK_OVERLAP` | 切分重叠大小 | `100` |
 | `EMBEDDING_DIMENSION` | Embedding 维度 | `1536` |
+| `RAG_TOP_K` | RAG 检索返回的最大结果数 | `4` |
+| `RAG_SNIPPET_MAX_LENGTH` | Citation snippet 最大长度 | `300` |
 
 ## 快速开始
 
@@ -105,7 +107,11 @@ curl http://localhost:8000/health/live
 
 ## Chat API 使用说明
 
-**重要说明**：当前 assistant response 是 mock 实现，不是真实 LLM。Mock 回复格式为 `Echo: {用户输入}`。
+**重要说明**：
+- 当前 assistant response 使用 RAG Agent 生成，基于 FakeEmbeddingProvider 和 FakeLLMProvider。
+- 当前使用 FakeEmbeddingProvider（deterministic，不访问网络），不是生产级语义检索。
+- 当前使用 FakeLLMProvider（deterministic，不访问网络），不是真实 LLM。
+- 无相关文档时返回稳定 fallback：`未在知识库中找到足够信息。`
 
 ### 创建聊天会话
 
@@ -140,34 +146,30 @@ curl -X POST http://localhost:8000/api/chat/sessions \
 curl http://localhost:8000/api/chat/sessions
 ```
 
-响应示例：
-```json
-{
-  "sessions": [
-    {
-      "id": "...",
-      "title": "My Chat Session",
-      "is_active": true,
-      "created_at": "...",
-      "updated_at": null
-    }
-  ],
-  "total": 1
-}
-```
-
 ### 获取单个会话
 
 ```bash
 curl http://localhost:8000/api/chat/sessions/{session_id}
 ```
 
-### 发送消息
+### RAG 问答（发送消息）
+
+先上传文档，然后发送问题：
 
 ```bash
+# 1. 上传文档
+curl -X POST http://localhost:8000/api/documents/upload \
+  -F "file=@README.md"
+
+# 2. 创建 chat session
+curl -X POST http://localhost:8000/api/chat/sessions \
+  -H "Content-Type: application/json" \
+  -d '{"title":"RAG Test"}'
+
+# 3. 发送问题
 curl -X POST http://localhost:8000/api/chat/sessions/{session_id}/messages \
   -H "Content-Type: application/json" \
-  -d '{"content":"Hello, this is a test message"}'
+  -d '{"content":"这个项目支持哪些 API？"}'
 ```
 
 响应示例：
@@ -177,7 +179,7 @@ curl -X POST http://localhost:8000/api/chat/sessions/{session_id}/messages \
     "id": "...",
     "session_id": "...",
     "role": "user",
-    "content": "Hello, this is a test message",
+    "content": "这个项目支持哪些 API？",
     "token_count": null,
     "created_at": "..."
   },
@@ -185,10 +187,41 @@ curl -X POST http://localhost:8000/api/chat/sessions/{session_id}/messages \
     "id": "...",
     "session_id": "...",
     "role": "assistant",
-    "content": "Echo: Hello, this is a test message",
+    "content": "根据知识库内容：...",
     "token_count": null,
     "created_at": "..."
-  }
+  },
+  "citations": [
+    {
+      "document_id": "...",
+      "document_title": "README.md",
+      "chunk_id": "...",
+      "chunk_index": 0,
+      "score": 0.85,
+      "snippet": "项目支持 Chat API 和 Document API..."
+    }
+  ],
+  "trace_id": "a1b2c3d4-e5f6-..."
+}
+```
+
+**Citation 说明**：
+- `document_id`：来源文档 ID
+- `document_title`：来源文档标题
+- `chunk_id`：来源 chunk ID
+- `chunk_index`：chunk 在文档中的索引
+- `score`：相似度分数
+- `snippet`：chunk 内容片段（最大 300 字符）
+
+**无相关文档时**：
+```json
+{
+  "user_message": {...},
+  "assistant_message": {
+    "content": "未在知识库中找到足够信息。"
+  },
+  "citations": [],
+  "trace_id": "..."
 }
 ```
 
@@ -198,31 +231,6 @@ curl -X POST http://localhost:8000/api/chat/sessions/{session_id}/messages \
 curl http://localhost:8000/api/chat/sessions/{session_id}/messages
 ```
 
-响应示例：
-```json
-{
-  "messages": [
-    {
-      "id": "...",
-      "session_id": "...",
-      "role": "user",
-      "content": "Hello",
-      "token_count": null,
-      "created_at": "..."
-    },
-    {
-      "id": "...",
-      "session_id": "...",
-      "role": "assistant",
-      "content": "Echo: Hello",
-      "token_count": null,
-      "created_at": "..."
-    }
-  ],
-  "total": 2
-}
-```
-
 消息按 `created_at` 升序返回。
 
 ## Document API 使用说明
@@ -230,8 +238,8 @@ curl http://localhost:8000/api/chat/sessions/{session_id}/messages
 **重要说明**：
 - 当前支持 `.txt` 和 `.md` 文件上传
 - 当前 Embedding 使用 FakeEmbeddingProvider（deterministic，不访问网络）
-- 当前阶段只做文档入库，不做 RAG 问答
 - 删除策略为软删除（status 设为 'deleted'）
+- 只有 status = `ready` 的文档才会被 RAG 检索
 
 ### 上传文档
 
@@ -240,52 +248,10 @@ curl -X POST http://localhost:8000/api/documents/upload \
   -F "file=@README.md"
 ```
 
-响应示例：
-```json
-{
-  "document": {
-    "id": "550e8400-e29b-41d4-a716-446655440000",
-    "title": "README.md",
-    "filename": "README.md",
-    "file_type": "md",
-    "file_size": 1234,
-    "status": "ready",
-    "created_at": "2024-01-15T10:00:00Z",
-    "updated_at": null
-  },
-  "chunks_count": 5
-}
-```
-
-上传 .txt 文件：
-```bash
-curl -X POST http://localhost:8000/api/documents/upload \
-  -F "file=@test.txt"
-```
-
 ### 列出文档
 
 ```bash
 curl http://localhost:8000/api/documents
-```
-
-响应示例：
-```json
-{
-  "documents": [
-    {
-      "id": "...",
-      "title": "README.md",
-      "filename": "README.md",
-      "file_type": "md",
-      "file_size": 1234,
-      "status": "ready",
-      "created_at": "...",
-      "updated_at": null
-    }
-  ],
-  "total": 1
-}
 ```
 
 ### 获取单个文档
@@ -300,33 +266,6 @@ curl http://localhost:8000/api/documents/{document_id}
 curl http://localhost:8000/api/documents/{document_id}/chunks
 ```
 
-响应示例：
-```json
-{
-  "chunks": [
-    {
-      "id": "...",
-      "document_id": "...",
-      "chunk_index": 0,
-      "content": "第一段文本内容...",
-      "token_count": 200,
-      "created_at": "...",
-      "updated_at": null
-    },
-    {
-      "id": "...",
-      "document_id": "...",
-      "chunk_index": 1,
-      "content": "第二段文本内容...",
-      "token_count": 180,
-      "created_at": "...",
-      "updated_at": null
-    }
-  ],
-  "total": 5
-}
-```
-
 **注意**：API 不返回 embedding 向量，避免响应过大。
 
 ### 删除文档
@@ -335,7 +274,49 @@ curl http://localhost:8000/api/documents/{document_id}/chunks
 curl -X DELETE http://localhost:8000/api/documents/{document_id}
 ```
 
-删除后返回 204 No Content。删除为软删除，文档 status 设为 'deleted'，默认不再出现在列表中。
+删除后返回 204 No Content。删除为软删除，文档 status 设为 'deleted'，默认不再出现在列表中，也不会被 RAG 检索。
+
+## pgvector Codespaces 验证步骤
+
+在 GitHub Codespaces 中验证 PostgreSQL + pgvector 向量检索：
+
+```bash
+# 1. 启动 postgres/redis
+docker compose up -d postgres redis
+
+# 2. 执行数据库迁移
+uv run alembic upgrade head
+
+# 3. 启动 API
+uv run uvicorn app.main:app --host 0.0.0.0 --port 8000
+
+# 4. 上传文档
+curl -X POST http://localhost:8000/api/documents/upload \
+  -F "file=@README.md"
+
+# 5. 创建 chat session 并发送问题
+curl -X POST http://localhost:8000/api/chat/sessions \
+  -H "Content-Type: application/json" \
+  -d '{"title":"RAG Test"}'
+
+curl -X POST http://localhost:8000/api/chat/sessions/{session_id}/messages \
+  -H "Content-Type: application/json" \
+  -d '{"content":"这个项目支持哪些 API？"}'
+
+# 确认 response 中包含 citations 和 trace_id
+```
+
+可选：用 psql 验证 pgvector：
+
+```bash
+# 验证 embedding 不为空
+docker compose exec postgres psql -U postgres -d enterprise_ai_agent \
+  -c "SELECT id, LEFT(embedding::text, 50) FROM document_chunks LIMIT 3;"
+
+# 验证 pgvector cosine distance 查询
+docker compose exec postgres psql -U postgres -d enterprise_ai_agent \
+  -c "SELECT chunk_index, embedding <=> '[0.1,0.2,...]'::vector AS distance FROM document_chunks LIMIT 5;"
+```
 
 ## 运行测试
 
@@ -349,6 +330,10 @@ uv run pytest -v
 # 运行特定测试文件
 uv run pytest tests/test_health.py
 uv run pytest tests/test_chat.py
+uv run pytest tests/test_rag_agent.py
+uv run pytest tests/test_retriever.py
+uv run pytest tests/test_llm.py
+uv run pytest tests/test_audit.py
 ```
 
 ## 代码质量检查
@@ -388,6 +373,10 @@ enterprise-ai-agent/
 │   │   ├── routes_health.py # 健康检查路由
 │   │   ├── routes_chat.py   # Chat API 路由
 │   │   └── routes_documents.py # Document API 路由
+│   ├── agents/
+│   │   ├── __init__.py      # Agent 模块入口
+│   │   ├── rag_agent.py     # RAG Agent
+│   │   └── schemas.py       # Agent 数据结构
 │   ├── core/
 │   │   ├── config.py        # 配置管理
 │   │   ├── logging.py       # 日志配置
@@ -398,16 +387,21 @@ enterprise-ai-agent/
 │   │   ├── session.py       # 数据库会话
 │   │   ├── models.py        # 数据模型
 │   │   └── repositories.py  # 数据库 Repository 层
-│   ├── schemas/
-│   │   ├── health.py        # 健康检查 Schema
-│   │   ├── chat.py          # Chat API Schema
-│   │   └── document.py      # Document API Schema
+│   ├── llm/
+│   │   ├── __init__.py      # LLM 模块入口
+│   │   ├── base.py          # LLM Provider 基类
+│   │   └── fake.py          # FakeLLMProvider
 │   ├── rag/
 │   │   ├── __init__.py      # RAG 模块入口
 │   │   ├── loaders.py       # 文档加载器
 │   │   ├── chunking.py      # 文本切分
 │   │   ├── embeddings.py    # Embedding Provider
-│   │   └── ingestion.py     # 文档入库流程
+│   │   ├── ingestion.py     # 文档入库流程
+│   │   └── retriever.py     # RAG 检索器
+│   ├── schemas/
+│   │   ├── health.py        # 健康检查 Schema
+│   │   ├── chat.py          # Chat API Schema
+│   │   └── document.py      # Document API Schema
 │   └── services/
 │       ├── __init__.py
 │       ├── chat_service.py  # Chat 业务逻辑
@@ -416,7 +410,11 @@ enterprise-ai-agent/
 │   ├── conftest.py          # 测试配置
 │   ├── test_health.py       # 健康检查测试
 │   ├── test_chat.py         # Chat API 测试
-│   └── test_documents.py    # Document API 测试
+│   ├── test_documents.py    # Document API 测试
+│   ├── test_rag_agent.py    # RAG Agent 测试
+│   ├── test_retriever.py    # Retriever 测试
+│   ├── test_llm.py          # LLM Provider 测试
+│   └── test_audit.py        # AuditLog 测试
 ├── alembic/
 │   ├── env.py               # Alembic 环境
 │   ├── script.py.mako       # 迁移模板
@@ -448,7 +446,7 @@ enterprise-ai-agent/
 - `GET /api/chat/sessions` - 列出聊天会话
 - `GET /api/chat/sessions/{session_id}` - 获取单个会话
 - `GET /api/chat/sessions/{session_id}/messages` - 获取会话消息列表
-- `POST /api/chat/sessions/{session_id}/messages` - 发送消息
+- `POST /api/chat/sessions/{session_id}/messages` - 发送消息（RAG 问答）
 
 ### Document API
 

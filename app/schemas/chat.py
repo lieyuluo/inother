@@ -65,8 +65,21 @@ class MessageListResponse(BaseModel):
     total: int
 
 
+class CitationResponse(BaseModel):
+    """Response schema for a citation in a chat message."""
+
+    document_id: str
+    document_title: str
+    chunk_id: str
+    chunk_index: int
+    score: float
+    snippet: str
+
+
 class SendMessageResponse(BaseModel):
     """Response schema for sending a message (includes user and assistant messages)."""
 
     user_message: MessageResponse
     assistant_message: MessageResponse
+    citations: list[CitationResponse] = Field(default_factory=list)
+    trace_id: str = ""

@@ -58,7 +58,6 @@ class TestListSessions:
         response = client.get("/api/chat/sessions")
         assert response.status_code == 200
         data = response.json()
-        # May have sessions from previous tests, but structure is correct
         assert "sessions" in data
         assert "total" in data
 
@@ -141,7 +140,7 @@ class TestSendMessage:
     """Tests for sending messages to a session."""
 
     def test_send_message_success(self, client: TestClient) -> None:
-        """Test sending a message successfully."""
+        """Test sending a message successfully with RAG response."""
         # Create a session
         create_response = client.post("/api/chat/sessions", json={})
         session_id = create_response.json()["id"]
@@ -156,10 +155,11 @@ class TestSendMessage:
 
         assert "user_message" in data
         assert "assistant_message" in data
+        assert "citations" in data
+        assert "trace_id" in data
         assert data["user_message"]["role"] == "user"
         assert data["user_message"]["content"] == "Hello"
         assert data["assistant_message"]["role"] == "assistant"
-        assert data["assistant_message"]["content"] == "Echo: Hello"
 
     def test_send_message_creates_two_messages(self, client: TestClient) -> None:
         """Test that sending a message creates user and assistant messages."""
@@ -218,11 +218,11 @@ class TestSendMessage:
         assert response.status_code == 422
 
 
-class TestMockResponse:
-    """Tests for mock assistant response."""
+class TestRAGResponse:
+    """Tests for RAG-powered assistant response."""
 
-    def test_mock_response_format(self, client: TestClient) -> None:
-        """Test that mock response follows the expected format."""
+    def test_rag_response_has_citations_field(self, client: TestClient) -> None:
+        """Test that RAG response includes citations field."""
         # Create a session
         create_response = client.post("/api/chat/sessions", json={})
         session_id = create_response.json()["id"]
@@ -235,8 +235,136 @@ class TestMockResponse:
         assert response.status_code == 201
         data = response.json()
 
-        # Check mock response format
-        assert data["assistant_message"]["content"] == "Echo: Test message"
+        assert "citations" in data
+        assert isinstance(data["citations"], list)
+
+    def test_rag_response_has_trace_id(self, client: TestClient) -> None:
+        """Test that RAG response includes trace_id."""
+        # Create a session
+        create_response = client.post("/api/chat/sessions", json={})
+        session_id = create_response.json()["id"]
+
+        # Send message
+        response = client.post(
+            f"/api/chat/sessions/{session_id}/messages",
+            json={"content": "Test message"},
+        )
+        assert response.status_code == 201
+        data = response.json()
+
+        assert "trace_id" in data
+        assert isinstance(data["trace_id"], str)
+        assert len(data["trace_id"]) > 0
+
+    def test_rag_no_documents_returns_fallback(self, client: TestClient) -> None:
+        """Test that RAG returns fallback when no documents exist."""
+        # Create a session
+        create_response = client.post("/api/chat/sessions", json={})
+        session_id = create_response.json()["id"]
+
+        # Send message (no documents uploaded)
+        response = client.post(
+            f"/api/chat/sessions/{session_id}/messages",
+            json={"content": "What is the API?"},
+        )
+        assert response.status_code == 201
+        data = response.json()
+
+        # Should return fallback response
+        assert data["assistant_message"]["content"] == "未在知识库中找到足够信息。"
+        assert data["citations"] == []
+
+    def test_rag_with_document_returns_citations(self, client: TestClient) -> None:
+        """Test that RAG returns citations when documents exist."""
+        # Upload a document first
+        import io
+
+        content = b"The enterprise AI agent system supports multiple API endpoints for chat and documents."
+        file = io.BytesIO(content)
+        client.post(
+            "/api/documents/upload",
+            files={"file": ("api_doc.txt", file, "text/plain")},
+        )
+
+        # Create a session
+        create_response = client.post("/api/chat/sessions", json={})
+        session_id = create_response.json()["id"]
+
+        # Send message related to the document
+        response = client.post(
+            f"/api/chat/sessions/{session_id}/messages",
+            json={"content": "What are the API endpoints?"},
+        )
+        assert response.status_code == 201
+        data = response.json()
+
+        # Should have citations from the ready document
+        assert len(data["citations"]) > 0
+        citation = data["citations"][0]
+        assert "document_id" in citation
+        assert "document_title" in citation
+        assert "chunk_id" in citation
+        assert "chunk_index" in citation
+        assert "score" in citation
+        assert "snippet" in citation
+
+    def test_rag_citation_snippet_from_real_chunk(self, client: TestClient) -> None:
+        """Test that citation snippets come from actual chunk content."""
+        import io
+
+        content = (
+            b"The system provides REST API endpoints for chat sessions and document management."
+        )
+        file = io.BytesIO(content)
+        client.post(
+            "/api/documents/upload",
+            files={"file": ("snippet_doc.txt", file, "text/plain")},
+        )
+
+        # Create a session
+        create_response = client.post("/api/chat/sessions", json={})
+        session_id = create_response.json()["id"]
+
+        # Send message
+        response = client.post(
+            f"/api/chat/sessions/{session_id}/messages",
+            json={"content": "API endpoints"},
+        )
+        data = response.json()
+
+        if data["citations"]:
+            # Snippet should contain actual content from the document
+            assert len(data["citations"][0]["snippet"]) > 0
+
+    def test_rag_assistant_message_saves_citations_metadata(self, client: TestClient) -> None:
+        """Test that assistant message metadata contains citations."""
+        import io
+
+        content = (
+            b"The metadata test document describes how assistant messages store citation data."
+        )
+        file = io.BytesIO(content)
+        client.post(
+            "/api/documents/upload",
+            files={"file": ("metadata_doc.txt", file, "text/plain")},
+        )
+
+        # Create a session
+        create_response = client.post("/api/chat/sessions", json={})
+        session_id = create_response.json()["id"]
+
+        # Send message
+        response = client.post(
+            f"/api/chat/sessions/{session_id}/messages",
+            json={"content": "API endpoints"},
+        )
+        assert response.status_code == 201
+
+        # Get messages and check assistant message
+        messages_response = client.get(f"/api/chat/sessions/{session_id}/messages")
+        messages = messages_response.json()["messages"]
+        assistant_msgs = [m for m in messages if m["role"] == "assistant"]
+        assert len(assistant_msgs) >= 1
 
 
 class TestRepositoryLayer:

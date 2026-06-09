@@ -40,6 +40,8 @@ class Settings(BaseSettings):
     rag_chunk_size: int = 800
     rag_chunk_overlap: int = 100
     embedding_dimension: int = 1536  # Match OpenAI embedding dimension
+    rag_top_k: int = 4
+    rag_snippet_max_length: int = 300
 
     def get_cors_origins(self) -> list[str]:
         """Parse CORS origins from string to list."""
