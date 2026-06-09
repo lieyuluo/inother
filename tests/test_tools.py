@@ -12,7 +12,6 @@ from app.tools.builtin import CalculatorTool, EchoTool, GetSystemStatusTool
 from app.tools.registry import DuplicateToolError, ToolNotFoundError, ToolRegistry
 from app.tools.schemas import ToolResult
 
-
 # ── Tool Abstraction / Registry Tests ──────────────────────────────────
 
 
