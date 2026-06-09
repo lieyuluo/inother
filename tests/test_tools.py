@@ -6,11 +6,12 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import Document
+from app.db.models import AuditLog, Document
 from app.tools.base import BaseTool
 from app.tools.builtin import CalculatorTool, EchoTool, GetSystemStatusTool
 from app.tools.registry import DuplicateToolError, ToolNotFoundError, ToolRegistry
 from app.tools.schemas import ToolResult
+
 
 # ── Tool Abstraction / Registry Tests ──────────────────────────────────
 
@@ -244,9 +245,7 @@ class TestSearchDocumentsTool:
 
     @pytest.mark.asyncio
     async def test_returns_ready_documents(
-        self,
-        async_db_session: AsyncSession,
-        ready_document: Document,  # noqa: ARG002
+        self, async_db_session: AsyncSession, ready_document: Document  # noqa: ARG002
     ) -> None:
         from app.tools.builtin import SearchDocumentsTool
 
@@ -257,9 +256,7 @@ class TestSearchDocumentsTool:
 
     @pytest.mark.asyncio
     async def test_excludes_deleted_documents(
-        self,
-        async_db_session: AsyncSession,
-        deleted_document: Document,  # noqa: ARG002
+        self, async_db_session: AsyncSession, deleted_document: Document  # noqa: ARG002
     ) -> None:
         from app.tools.builtin import SearchDocumentsTool
 
@@ -330,12 +327,11 @@ class TestToolAPI:
         assert data["status"] == "error"
         assert "text" in data["error"].lower()
 
-    def test_tool_invoke_writes_audit_log(
-        self, client: TestClient, async_db_session: AsyncSession
+    @pytest.mark.asyncio
+    async def test_tool_invoke_writes_audit_log(
+        self, async_db_session: AsyncSession, client: TestClient
     ) -> None:
         from sqlalchemy import select
-
-        from app.db.models import AuditLog
 
         response = client.post(
             "/api/tools/echo_tool/invoke",
@@ -343,9 +339,9 @@ class TestToolAPI:
         )
         assert response.status_code == 200
 
-        # Check audit log
+        # Check audit log using async session
         stmt = select(AuditLog).where(AuditLog.action == "tool.invoke")
-        result = async_db_session.execute(stmt)
+        result = await async_db_session.execute(stmt)
         logs = list(result.scalars().all())
         assert len(logs) >= 1
         log = logs[-1]
@@ -361,16 +357,17 @@ class TestChatToolCalling:
     """Tests for /tool command in chat."""
 
     def test_tool_echo_in_chat(self, client: TestClient) -> None:
-        # Create session
+        # Create session (returns 201)
         session_resp = client.post("/api/chat/sessions", json={})
+        assert session_resp.status_code == 201
         session_id = session_resp.json()["id"]
 
-        # Send /tool command
+        # Send /tool command (returns 201)
         msg_resp = client.post(
             f"/api/chat/sessions/{session_id}/messages",
             json={"content": '/tool echo_tool {"text":"hello"}'},
         )
-        assert msg_resp.status_code == 200
+        assert msg_resp.status_code == 201
         data = msg_resp.json()
         assert "hello" in data["assistant_message"]["content"]
         assert data["citations"] == []
@@ -386,7 +383,7 @@ class TestChatToolCalling:
             f"/api/chat/sessions/{session_id}/messages",
             json={"content": '/tool calculator_tool {"expression":"1+2"}'},
         )
-        assert msg_resp.status_code == 200
+        assert msg_resp.status_code == 201
         data = msg_resp.json()
         assert "3" in data["assistant_message"]["content"]
         assert data["citations"] == []
@@ -401,7 +398,7 @@ class TestChatToolCalling:
             f"/api/chat/sessions/{session_id}/messages",
             json={"content": "What is AI?"},
         )
-        assert msg_resp.status_code == 200
+        assert msg_resp.status_code == 201
         data = msg_resp.json()
         # Should have RAG response (fallback since no documents)
         assert data["assistant_message"]["content"]
@@ -416,7 +413,7 @@ class TestChatToolCalling:
             f"/api/chat/sessions/{session_id}/messages",
             json={"content": '/tool echo_tool {"text":"test"}'},
         )
-        assert msg_resp.status_code == 200
+        assert msg_resp.status_code == 201
 
     def test_tool_call_citations_empty(self, client: TestClient) -> None:
         # Create session
@@ -426,9 +423,9 @@ class TestChatToolCalling:
         # Send /tool command
         msg_resp = client.post(
             f"/api/chat/sessions/{session_id}/messages",
-            json={"content": "/tool get_system_status_tool {}"},
+            json={"content": '/tool get_system_status_tool {}'},
         )
-        assert msg_resp.status_code == 200
+        assert msg_resp.status_code == 201
         data = msg_resp.json()
         assert data["citations"] == []
 
@@ -444,7 +441,7 @@ class TestChatToolCalling:
             json={"content": "/tool echo_tool not_json"},
         )
         # Should still get a response (falls through to RAG)
-        assert msg_resp.status_code == 200
+        assert msg_resp.status_code == 201
 
 
 # ── Compatibility Tests ─────────────────────────────────────────────────
@@ -459,7 +456,7 @@ class TestToolCompatibility:
 
     def test_chat_session_still_works(self, client: TestClient) -> None:
         response = client.post("/api/chat/sessions", json={})
-        assert response.status_code == 200
+        assert response.status_code == 201
 
     def test_documents_still_works(self, client: TestClient) -> None:
         response = client.get("/api/documents")
