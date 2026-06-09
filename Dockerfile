@@ -5,6 +5,7 @@ FROM python:3.12-slim
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 ENV UV_SYSTEM_PYTHON=1
+ENV VIRTUAL_ENV=/app/.venv
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -14,8 +15,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Install uv
 RUN curl -LsSf https://astral.sh/uv/install.sh | sh
 
-# Add uv to PATH
-ENV PATH="/root/.local/bin:$PATH"
+# Add uv and the application virtual environment to PATH
+ENV PATH="/app/.venv/bin:/root/.local/bin:$PATH"
 
 # Set work directory
 WORKDIR /app
@@ -36,7 +37,8 @@ COPY alembic.ini .
 RUN uv sync --no-dev
 
 # Create non-root user for security
-RUN useradd --create-home --shell /bin/bash appuser
+RUN useradd --create-home --shell /bin/bash appuser \
+    && chown -R appuser:appuser /app
 USER appuser
 
 # Expose port
@@ -47,4 +49,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:8000/health || exit 1
 
 # Run the application
-CMD ["uv", "run", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
