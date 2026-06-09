@@ -244,7 +244,9 @@ class TestSearchDocumentsTool:
 
     @pytest.mark.asyncio
     async def test_returns_ready_documents(
-        self, async_db_session: AsyncSession, ready_document: Document  # noqa: ARG002
+        self,
+        async_db_session: AsyncSession,
+        ready_document: Document,  # noqa: ARG002
     ) -> None:
         from app.tools.builtin import SearchDocumentsTool
 
@@ -255,7 +257,9 @@ class TestSearchDocumentsTool:
 
     @pytest.mark.asyncio
     async def test_excludes_deleted_documents(
-        self, async_db_session: AsyncSession, deleted_document: Document  # noqa: ARG002
+        self,
+        async_db_session: AsyncSession,
+        deleted_document: Document,  # noqa: ARG002
     ) -> None:
         from app.tools.builtin import SearchDocumentsTool
 
@@ -422,7 +426,7 @@ class TestChatToolCalling:
         # Send /tool command
         msg_resp = client.post(
             f"/api/chat/sessions/{session_id}/messages",
-            json={"content": '/tool get_system_status_tool {}'},
+            json={"content": "/tool get_system_status_tool {}"},
         )
         assert msg_resp.status_code == 201
         data = msg_resp.json()
