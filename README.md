@@ -4,7 +4,7 @@
 
 ## 项目介绍
 
-Enterprise AI Agent 是一个企业级 AI Agent 后端服务，旨在提供可靠的 AI 对话、文档管理和 RAG（检索增强生成）功能。当前为 v0.1 版本，包含基础项目骨架、配置管理、数据库模型和健康检查 API。
+Enterprise AI Agent 是一个企业级 AI Agent 后端服务，旨在提供可靠的 AI 对话、文档管理和 RAG（检索增强生成）功能。当前为 v0.1 版本，Phase 2 已实现基础聊天会话系统。
 
 ## 技术栈
 
@@ -100,6 +100,128 @@ curl http://localhost:8000/health/live
 
 **注意**：如果 Codespaces 自动端口转发导致 `localhost` 不可访问，请使用 Codespaces 提供的 forwarded port URL（通常在 Codespace 的 "Ports" 标签中查看）。
 
+## Chat API 使用说明
+
+**重要说明**：当前 assistant response 是 mock 实现，不是真实 LLM。Mock 回复格式为 `Echo: {用户输入}`。
+
+### 创建聊天会话
+
+```bash
+curl -X POST http://localhost:8000/api/chat/sessions \
+  -H "Content-Type: application/json" \
+  -d '{"title":"My Chat Session"}'
+```
+
+响应示例：
+```json
+{
+  "id": "550e8400-e29b-41d4-a716-446655440000",
+  "title": "My Chat Session",
+  "is_active": true,
+  "created_at": "2024-01-15T10:00:00Z",
+  "updated_at": null
+}
+```
+
+如果不提供 title，默认使用 "New Chat"：
+
+```bash
+curl -X POST http://localhost:8000/api/chat/sessions \
+  -H "Content-Type: application/json" \
+  -d '{}'
+```
+
+### 列出聊天会话
+
+```bash
+curl http://localhost:8000/api/chat/sessions
+```
+
+响应示例：
+```json
+{
+  "sessions": [
+    {
+      "id": "...",
+      "title": "My Chat Session",
+      "is_active": true,
+      "created_at": "...",
+      "updated_at": null
+    }
+  ],
+  "total": 1
+}
+```
+
+### 获取单个会话
+
+```bash
+curl http://localhost:8000/api/chat/sessions/{session_id}
+```
+
+### 发送消息
+
+```bash
+curl -X POST http://localhost:8000/api/chat/sessions/{session_id}/messages \
+  -H "Content-Type: application/json" \
+  -d '{"content":"Hello, this is a test message"}'
+```
+
+响应示例：
+```json
+{
+  "user_message": {
+    "id": "...",
+    "session_id": "...",
+    "role": "user",
+    "content": "Hello, this is a test message",
+    "token_count": null,
+    "created_at": "..."
+  },
+  "assistant_message": {
+    "id": "...",
+    "session_id": "...",
+    "role": "assistant",
+    "content": "Echo: Hello, this is a test message",
+    "token_count": null,
+    "created_at": "..."
+  }
+}
+```
+
+### 获取消息列表
+
+```bash
+curl http://localhost:8000/api/chat/sessions/{session_id}/messages
+```
+
+响应示例：
+```json
+{
+  "messages": [
+    {
+      "id": "...",
+      "session_id": "...",
+      "role": "user",
+      "content": "Hello",
+      "token_count": null,
+      "created_at": "..."
+    },
+    {
+      "id": "...",
+      "session_id": "...",
+      "role": "assistant",
+      "content": "Echo: Hello",
+      "token_count": null,
+      "created_at": "..."
+    }
+  ],
+  "total": 2
+}
+```
+
+消息按 `created_at` 升序返回。
+
 ## 运行测试
 
 ```bash
@@ -111,6 +233,7 @@ uv run pytest -v
 
 # 运行特定测试文件
 uv run pytest tests/test_health.py
+uv run pytest tests/test_chat.py
 ```
 
 ## 代码质量检查
@@ -147,7 +270,8 @@ enterprise-ai-agent/
 │   ├── main.py              # FastAPI 应用入口
 │   ├── api/
 │   │   ├── __init__.py
-│   │   └── routes_health.py # 健康检查路由
+│   │   ├── routes_health.py # 健康检查路由
+│   │   └── routes_chat.py   # Chat API 路由
 │   ├── core/
 │   │   ├── config.py        # 配置管理
 │   │   ├── logging.py       # 日志配置
@@ -156,12 +280,18 @@ enterprise-ai-agent/
 │   ├── db/
 │   │   ├── base.py          # SQLAlchemy Base
 │   │   ├── session.py       # 数据库会话
-│   │   └── models.py        # 数据模型
-│   └── schemas/
-│       └── health.py        # 健康检查 Schema
+│   │   ├── models.py        # 数据模型
+│   │   └── repositories.py  # 数据库 Repository 层
+│   ├── schemas/
+│   │   ├── health.py        # 健康检查 Schema
+│   │   └── chat.py          # Chat API Schema
+│   └── services/
+│       ├── __init__.py
+│       └── chat_service.py  # Chat 业务逻辑
 ├── tests/
 │   ├── conftest.py          # 测试配置
-│   └── test_health.py       # 健康检查测试
+│   ├── test_health.py       # 健康检查测试
+│   └── test_chat.py         # Chat API 测试
 ├── alembic/
 │   ├── env.py               # Alembic 环境
 │   ├── script.py.mako       # 迁移模板
@@ -186,6 +316,14 @@ enterprise-ai-agent/
 - `GET /health` - 基础健康检查
 - `GET /health/ready` - 就绪检查（包含数据库和 Redis 状态）
 - `GET /health/live` - 存活检查
+
+### Chat API
+
+- `POST /api/chat/sessions` - 创建聊天会话
+- `GET /api/chat/sessions` - 列出聊天会话
+- `GET /api/chat/sessions/{session_id}` - 获取单个会话
+- `GET /api/chat/sessions/{session_id}/messages` - 获取会话消息列表
+- `POST /api/chat/sessions/{session_id}/messages` - 发送消息
 
 ### 响应示例
 
