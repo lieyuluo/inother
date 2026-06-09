@@ -47,6 +47,7 @@ async def async_db_session(tmp_path) -> AsyncGenerator[AsyncSession, None]:
 @pytest.fixture
 def client(async_db_session: AsyncSession) -> Generator[TestClient, None, None]:
     """Create a test client for the FastAPI application."""
+
     async def override_get_db_session() -> AsyncGenerator[AsyncSession, None]:
         try:
             yield async_db_session

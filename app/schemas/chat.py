@@ -10,7 +10,9 @@ from pydantic import BaseModel, Field, field_validator
 class CreateSessionRequest(BaseModel):
     """Request schema for creating a new chat session."""
 
-    title: str | None = Field(default=None, max_length=255, description="Optional title for the session")
+    title: str | None = Field(
+        default=None, max_length=255, description="Optional title for the session"
+    )
 
 
 class SendMessageRequest(BaseModel):
