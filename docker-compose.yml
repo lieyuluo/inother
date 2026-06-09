@@ -1,0 +1,73 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: enterprise-ai-agent-api
+    ports:
+      - "8000:8000"
+    environment:
+      - APP_NAME=enterprise-ai-agent
+      - APP_ENV=development
+      - APP_VERSION=0.1.0
+      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@postgres:5432/enterprise_ai_agent
+      - REDIS_URL=redis://redis:6379/0
+      - LOG_LEVEL=INFO
+      - CORS_ORIGINS=["http://localhost:3000","http://localhost:8000"]
+      - SECRET_KEY=dev-secret-key-change-in-production
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - enterprise-ai-agent-network
+    restart: unless-stopped
+
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: enterprise-ai-agent-postgres
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=enterprise_ai_agent
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d enterprise_ai_agent"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - enterprise-ai-agent-network
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: enterprise-ai-agent-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    networks:
+      - enterprise-ai-agent-network
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+
+networks:
+  enterprise-ai-agent-network:
+    driver: bridge
