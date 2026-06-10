@@ -138,7 +138,11 @@ class Retriever:
             JOIN documents d ON dc.document_id = d.id
             WHERE d.status = 'ready'
               AND dc.embedding IS NOT NULL
-              AND (:user_id IS NULL OR d.visibility = 'public' OR d.user_id = :user_id)
+              AND (
+                  CAST(:user_id AS uuid) IS NULL
+                  OR d.visibility = 'public'
+                  OR d.user_id = CAST(:user_id AS uuid)
+              )
             ORDER BY dc.embedding <=> CAST(:query_embedding AS vector)
             LIMIT :limit
         """)
