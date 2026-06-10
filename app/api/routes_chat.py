@@ -1,9 +1,11 @@
-"""Chat API routes for session and message operations."""
+"""Chat API routes including SSE streaming endpoint."""
 
-from typing import Annotated
+import json
+from collections.abc import AsyncGenerator
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db_session
@@ -11,110 +13,87 @@ from app.schemas.chat import (
     CreateSessionRequest,
     MessageListResponse,
     SendMessageRequest,
-    SendMessageResponse,
     SessionListResponse,
     SessionResponse,
 )
 from app.services.chat_service import ChatService
 
-router = APIRouter(prefix="/api/chat", tags=["Chat"])
-
-# Dependency for database session
-DBSession = Annotated[AsyncSession, Depends(get_db_session)]
+router = APIRouter(prefix="/api/chat", tags=["chat"])
 
 
-@router.post(
-    "/sessions",
-    response_model=SessionResponse,
-    status_code=status.HTTP_201_CREATED,
-    summary="Create a new chat session",
-    description="Create a new chat session. If title is not provided, defaults to 'New Chat'.",
-)
+def _sse_event(event: str, data: object) -> str:
+    """Format an SSE event string."""
+    return f"event: {event}\ndata: {json.dumps(data, default=str, ensure_ascii=False)}\n\n"
+
+
+def _chunk_answer(answer: str, chunk_size: int = 5) -> list[str]:
+    """Split answer into chunks for simulated token streaming.
+
+    Since fake provider doesn't stream real tokens, we simulate
+    by splitting the answer into small chunks.
+    """
+    if not answer:
+        return []
+    chunks = []
+    for i in range(0, len(answer), chunk_size):
+        chunks.append(answer[i : i + chunk_size])
+    return chunks
+
+
+# ── Session endpoints ──────────────────────────────────────────────────
+
+
+@router.post("/sessions", status_code=status.HTTP_201_CREATED, response_model=SessionResponse)
 async def create_session(
-    request: CreateSessionRequest,
-    session: DBSession,
+    request: CreateSessionRequest | None = None,
+    session: AsyncSession = Depends(get_db_session),
 ) -> SessionResponse:
     """Create a new chat session."""
     service = ChatService(session)
-    return await service.create_session(title=request.title)
+    title = request.title if request else None
+    result = await service.create_session(title=title)
+    return result
 
 
-@router.get(
-    "/sessions",
-    response_model=SessionListResponse,
-    status_code=status.HTTP_200_OK,
-    summary="List all chat sessions",
-    description="Get all chat sessions for the current user, ordered by created_at descending.",
-)
-async def list_sessions(
-    session: DBSession,
-    limit: int = 100,
-    offset: int = 0,
-) -> SessionListResponse:
+@router.get("/sessions")
+async def list_sessions(session: AsyncSession = Depends(get_db_session)) -> SessionListResponse:
     """List all chat sessions."""
     service = ChatService(session)
-    return await service.list_sessions(limit=limit, offset=offset)
+    return await service.list_sessions()
 
 
-@router.get(
-    "/sessions/{session_id}",
-    response_model=SessionResponse,
-    status_code=status.HTTP_200_OK,
-    summary="Get a chat session",
-    description="Get a specific chat session by ID. Returns 404 if not found.",
-)
-async def get_session(
-    session_id: UUID,
-    session: DBSession,
-) -> SessionResponse:
+@router.get("/sessions/{session_id}")
+async def get_session(session_id: UUID, session: AsyncSession = Depends(get_db_session)) -> object:
     """Get a chat session by ID."""
     service = ChatService(session)
     result = await service.get_session(session_id)
     if not result:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Chat session with id '{session_id}' not found",
-        )
+        raise HTTPException(status_code=404, detail="Session not found")
     return result
 
 
-@router.get(
-    "/sessions/{session_id}/messages",
-    response_model=MessageListResponse,
-    status_code=status.HTTP_200_OK,
-    summary="Get messages for a session",
-    description="Get all messages for a chat session, ordered by created_at ascending. Returns 404 if session not found.",
-)
+@router.get("/sessions/{session_id}/messages")
 async def get_messages(
-    session_id: UUID,
-    session: DBSession,
-    limit: int = 100,
-    offset: int = 0,
+    session_id: UUID, session: AsyncSession = Depends(get_db_session)
 ) -> MessageListResponse:
-    """Get messages for a chat session."""
+    """Get messages for a session."""
     service = ChatService(session)
-    result = await service.get_messages(session_id, limit=limit, offset=offset)
+    result = await service.get_messages(session_id)
     if not result:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Chat session with id '{session_id}' not found",
-        )
+        raise HTTPException(status_code=404, detail="Session not found")
     return result
 
 
-@router.post(
-    "/sessions/{session_id}/messages",
-    response_model=SendMessageResponse,
-    status_code=status.HTTP_201_CREATED,
-    summary="Send a message to a session",
-    description="Send a user message to a chat session and receive a mock assistant response. Returns 404 if session not found.",
-)
+# ── Non-streaming message endpoint ────────────────────────────────────
+
+
+@router.post("/sessions/{session_id}/messages", status_code=status.HTTP_201_CREATED)
 async def send_message(
     session_id: UUID,
     request: SendMessageRequest,
-    session: DBSession,
-) -> SendMessageResponse:
-    """Send a message to a chat session."""
+    session: AsyncSession = Depends(get_db_session),
+) -> object:
+    """Send a message to a session (non-streaming)."""
     service = ChatService(session)
     try:
         result = await service.send_message(session_id, content=request.content, mode=request.mode)
@@ -123,9 +102,105 @@ async def send_message(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e),
         ) from e
-    if not result:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Chat session with id '{session_id}' not found",
-        )
+
+    if result is None:
+        raise HTTPException(status_code=404, detail="Session not found")
     return result
+
+
+# ── SSE Streaming message endpoint ────────────────────────────────────
+
+
+@router.post("/sessions/{session_id}/messages/stream")
+async def send_message_stream(
+    session_id: UUID,
+    request: SendMessageRequest,
+    session: AsyncSession = Depends(get_db_session),
+) -> StreamingResponse:
+    """Send a message to a session with SSE streaming."""
+    service = ChatService(session)
+
+    async def event_generator() -> AsyncGenerator[str, None]:
+        try:
+            result = await service.process_message(session_id, request.content, request.mode)
+        except ValueError as e:
+            yield _sse_event("error", {"error": str(e)})
+            return
+        except Exception:
+            yield _sse_event("error", {"error": "Internal server error"})
+            return
+
+        if result is None:
+            yield _sse_event("error", {"error": "Session not found"})
+            return
+
+        # 1. trace event
+        yield _sse_event("trace", {"trace_id": result.trace_id})
+
+        # 2. user_message event
+        yield _sse_event("user_message", result.user_message.model_dump(mode="json"))
+
+        # 3. token events (simulated streaming)
+        chunks = _chunk_answer(result.answer)
+        for chunk in chunks:
+            yield _sse_event("token", {"content": chunk})
+
+        # 4. citations event
+        if result.citations:
+            yield _sse_event(
+                "citations",
+                [c.model_dump(mode="json") for c in result.citations],
+            )
+
+        # 5. steps event (ReAct)
+        if result.steps:
+            yield _sse_event(
+                "steps",
+                [s.model_dump(mode="json") for s in result.steps],
+            )
+
+        # 6. plan event (Plan-Execute)
+        if result.plan:
+            yield _sse_event(
+                "plan",
+                [p.model_dump(mode="json") for p in result.plan],
+            )
+
+        # 7. step_results event (Plan-Execute)
+        if result.step_results:
+            yield _sse_event(
+                "step_results",
+                [sr.model_dump(mode="json") for sr in result.step_results],
+            )
+
+        # 8. tool_calls event
+        if result.tool_calls:
+            yield _sse_event("tool_calls", result.tool_calls)
+
+        # 9. Save assistant message and emit
+        from app.db.repositories import ChatMessageRepository
+        from app.services.chat_service import _msg_to_response
+
+        msg_repo = ChatMessageRepository(session)
+        assistant_message = await msg_repo.create(
+            session_id=session_id,
+            role="assistant",
+            content=result.answer,
+            metadata=result.assistant_metadata,
+        )
+
+        assistant_msg_resp = _msg_to_response(assistant_message)
+        yield _sse_event("assistant_message", assistant_msg_resp.model_dump(mode="json"))
+
+        # 10. done event
+        yield _sse_event("done", {"status": "ok"})
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )

@@ -39,11 +39,16 @@ class Settings(BaseSettings):
     # LLM Provider Configuration
     llm_provider: str = "fake"  # 'fake' or 'openai'
     openai_api_key: str = ""
-    openai_llm_model: str = "gpt-3.5-turbo"
+    openai_base_url: str = "https://api.openai.com/v1"
+    openai_llm_model: str = "gpt-4o-mini"
 
     # Embedding Provider Configuration
     embedding_provider: str = "fake"  # 'fake' or 'openai'
-    openai_embedding_model: str = "text-embedding-ada-002"
+    openai_embedding_model: str = "text-embedding-3-small"
+
+    # Provider Configuration
+    provider_timeout_seconds: float = 30.0
+    provider_max_retries: int = 2
 
     # RAG Configuration
     rag_chunk_size: int = 800

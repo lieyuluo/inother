@@ -3,9 +3,10 @@
 import pytest
 
 from app.core.config import Settings, clear_settings_cache
+from app.core.provider_errors import ProviderConfigError
 from app.llm.base import BaseLLMProvider
-from app.llm.external import OpenAILLMProvider
 from app.llm.fake import FALLBACK_RESPONSE, FakeLLMProvider
+from app.llm.openai_provider import OpenAILLMProvider
 from app.llm.provider import get_llm_provider
 from app.rag.embeddings import (
     FakeEmbeddingProvider,
@@ -30,10 +31,10 @@ class TestLLMProviderFactory:
         assert isinstance(provider, FakeLLMProvider)
 
     def test_get_llm_provider_returns_openai_placeholder(self) -> None:
-        """Test that get_llm_provider with 'openai' returns OpenAILLMProvider."""
+        """Test that get_llm_provider with 'openai' requires API key."""
         settings = Settings(llm_provider="openai")
-        provider = get_llm_provider(settings)
-        assert isinstance(provider, OpenAILLMProvider)
+        with pytest.raises(ProviderConfigError, match="OPENAI_API_KEY"):
+            get_llm_provider(settings)
 
     def test_unsupported_llm_provider_raises_error(self) -> None:
         """Test that unsupported LLM provider raises ValueError."""
@@ -74,9 +75,9 @@ class TestEmbeddingProviderFactory:
         assert isinstance(provider, FakeEmbeddingProvider)
 
     def test_get_embedding_provider_returns_openai_placeholder(self) -> None:
-        """Test that get_embedding_provider with 'openai' returns OpenAIEmbeddingProvider."""
-        provider = get_embedding_provider(provider_name="openai")
-        assert isinstance(provider, OpenAIEmbeddingProvider)
+        """Test that get_embedding_provider with 'openai' requires API key."""
+        with pytest.raises(ProviderConfigError, match="OPENAI_API_KEY"):
+            get_embedding_provider(provider_name="openai")
 
     def test_unsupported_embedding_provider_raises_error(self) -> None:
         """Test that unsupported embedding provider raises ValueError."""
@@ -100,58 +101,50 @@ class TestEmbeddingProviderFactory:
 
 
 class TestOpenAILLMProviderPlaceholder:
-    """Tests for OpenAI LLM provider placeholder."""
+    """Tests for OpenAI LLM provider configuration."""
 
-    def test_openai_llm_raises_not_implemented(self) -> None:
-        """Test that OpenAI LLM provider raises NotImplementedError."""
-        provider = OpenAILLMProvider()
-        with pytest.raises(NotImplementedError, match="v0.2 Phase 1"):
-            provider.generate("test query", "test context")
+    def test_openai_llm_without_api_key_raises_config_error(self) -> None:
+        """Test that OpenAI LLM provider raises ProviderConfigError without API key."""
+        with pytest.raises(ProviderConfigError, match="OPENAI_API_KEY"):
+            OpenAILLMProvider()
 
-    def test_openai_llm_no_network_access(self) -> None:
-        """Test that OpenAI LLM provider does not access network."""
-        provider = OpenAILLMProvider(api_key="test-key")
-        # Should raise NotImplementedError, not attempt network call
-        with pytest.raises(NotImplementedError):
-            provider.generate("test", "context")
+    def test_openai_llm_with_empty_api_key_raises_config_error(self) -> None:
+        """Test that OpenAI LLM provider raises ProviderConfigError with empty API key."""
+        with pytest.raises(ProviderConfigError, match="OPENAI_API_KEY"):
+            OpenAILLMProvider(api_key="")
 
     def test_openai_llm_error_message_clear(self) -> None:
         """Test that OpenAI LLM provider error message is clear."""
-        provider = OpenAILLMProvider()
-        with pytest.raises(NotImplementedError, match="OpenAILLMProvider"):
-            provider.generate("test", "context")
+        with pytest.raises(ProviderConfigError, match="OPENAI_API_KEY"):
+            OpenAILLMProvider()
 
     def test_openai_llm_is_base_provider(self) -> None:
         """Test that OpenAILLMProvider is a BaseLLMProvider."""
-        provider = OpenAILLMProvider()
+        provider = OpenAILLMProvider(api_key="test-key")
         assert isinstance(provider, BaseLLMProvider)
 
 
 class TestOpenAIEmbeddingProviderPlaceholder:
-    """Tests for OpenAI Embedding provider placeholder."""
+    """Tests for OpenAI Embedding provider configuration."""
 
-    def test_openai_embedding_raises_not_implemented(self) -> None:
-        """Test that OpenAI Embedding provider raises NotImplementedError."""
-        provider = OpenAIEmbeddingProvider()
-        with pytest.raises(NotImplementedError, match="v0.2 Phase 1"):
-            provider.embed("test text")
+    def test_openai_embedding_without_api_key_raises_config_error(self) -> None:
+        """Test that OpenAI Embedding provider raises ProviderConfigError without API key."""
+        with pytest.raises(ProviderConfigError, match="OPENAI_API_KEY"):
+            OpenAIEmbeddingProvider()
 
-    def test_openai_embedding_no_network_access(self) -> None:
-        """Test that OpenAI Embedding provider does not access network."""
-        provider = OpenAIEmbeddingProvider(api_key="test-key")
-        # Should raise NotImplementedError, not attempt network call
-        with pytest.raises(NotImplementedError):
-            provider.embed("test")
+    def test_openai_embedding_with_empty_api_key_raises_config_error(self) -> None:
+        """Test that OpenAI Embedding provider raises ProviderConfigError with empty API key."""
+        with pytest.raises(ProviderConfigError, match="OPENAI_API_KEY"):
+            OpenAIEmbeddingProvider(api_key="")
 
     def test_openai_embedding_error_message_clear(self) -> None:
         """Test that OpenAI Embedding provider error message is clear."""
-        provider = OpenAIEmbeddingProvider()
-        with pytest.raises(NotImplementedError, match="OpenAIEmbeddingProvider"):
-            provider.embed("test")
+        with pytest.raises(ProviderConfigError, match="OPENAI_API_KEY"):
+            OpenAIEmbeddingProvider()
 
     def test_openai_embedding_get_dimension_works(self) -> None:
         """Test that get_dimension works for OpenAI Embedding provider."""
-        provider = OpenAIEmbeddingProvider()
+        provider = OpenAIEmbeddingProvider(api_key="test-key")
         assert provider.get_dimension() == 1536
 
 

@@ -2,8 +2,8 @@
 
 from app.core.config import Settings
 from app.llm.base import BaseLLMProvider
-from app.llm.external import OpenAILLMProvider
 from app.llm.fake import FakeLLMProvider
+from app.llm.openai_provider import OpenAILLMProvider
 
 
 def get_llm_provider(settings: Settings | None = None) -> BaseLLMProvider:
@@ -17,6 +17,7 @@ def get_llm_provider(settings: Settings | None = None) -> BaseLLMProvider:
 
     Raises:
         ValueError: If LLM_PROVIDER is not supported.
+        ProviderConfigError: If required config is missing for the provider.
     """
     if settings is None:
         from app.core.config import get_settings
@@ -31,6 +32,9 @@ def get_llm_provider(settings: Settings | None = None) -> BaseLLMProvider:
         return OpenAILLMProvider(
             api_key=settings.openai_api_key or None,
             model=settings.openai_llm_model,
+            base_url=settings.openai_base_url,
+            timeout=settings.provider_timeout_seconds,
+            max_retries=settings.provider_max_retries,
         )
     else:
         raise ValueError(

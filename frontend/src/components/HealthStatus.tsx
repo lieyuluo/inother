@@ -8,9 +8,9 @@ export function HealthStatus() {
 
   useEffect(() => {
     api
-      .getHealth()
+      .health()
       .then(setHealth)
-      .catch((e) => setError(e.message))
+      .catch((e: Error) => setError(e.message))
   }, [])
 
   return (

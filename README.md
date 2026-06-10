@@ -1,19 +1,23 @@
 # Enterprise AI Agent
 
-企业级 AI Agent 后端服务 - 一个生产就绪的 FastAPI + React 应用。当前版本 v0.2。
+企业级 AI Agent 后端服务 - 一个生产就绪的 FastAPI + React 应用。当前版本 v1.0。
 
 ## 项目介绍
 
-Enterprise AI Agent 是一个企业级 AI Agent 应用，提供 AI 对话、文档管理、RAG（检索增强生成）、工具调用、ReAct Agent、Plan-and-Execute Agent 和 MCP 集成功能。v0.2 Phase 5 新增了 MCP Demo Integration。
+Enterprise AI Agent 是一个企业级 AI Agent 应用，提供 AI 对话、文档管理、RAG（检索增强生成）、工具调用、ReAct Agent、Plan-and-Execute Agent 和 MCP 集成功能。v1.0 Phase 1 新增了 Real Provider + SSE Streaming Chat。
 
-## v0.2 功能清单
+## v1.0 功能清单
 
 - 健康检查 API
 - Chat 会话和消息管理
 - 文档上传、列表、删除
 - RAG 检索与问答
-- LLM Provider 可通过配置选择（fake/openai 占位）
-- Embedding Provider 可通过配置选择（fake/openai 占位）
+- LLM Provider 可通过配置选择（fake / openai-compatible）
+- Embedding Provider 可通过配置选择（fake / openai-compatible）
+- **OpenAI-compatible LLM Provider（真实实现，非占位）**
+- **OpenAI-compatible Embedding Provider（真实实现，非占位）**
+- **Provider factory 支持 fake 或 openai-compatible**
+- **Provider 错误体系：ProviderError、ProviderConfigError、ProviderTimeoutError、ProviderResponseError**
 - PostgreSQL 环境下 Retriever 使用 pgvector 原生 cosine distance 查询
 - SQLite 测试环境下 Retriever 使用 Python cosine fallback
 - Citations 追踪
@@ -32,6 +36,10 @@ Enterprise AI Agent 是一个企业级 AI Agent 应用，提供 AI 对话、文�
 - **MCP Demo Integration（3 个 demo MCP tools）**
 - **MCP Tools 注册到 Tool Registry**
 - **ReAct / Plan-and-Execute 支持 MCP tools**
+- **SSE Streaming Chat API 端点**
+- **SSE 支持 rag / react / plan_execute 模式**
+- **SSE 支持 /tool 命令流式输出**
+- **前端 ChatWindow 流式开关和流式显示**
 - 基础 Web UI
 - Docker Compose 一键部署
 
@@ -225,7 +233,6 @@ curl -X POST http://localhost:8000/api/chat/sessions/{session_id}/messages \
 ### ReAct 限制
 
 - **无真实 LLM 自动规划**：当前使用确定性规则，不是 LLM chain-of-thought
-- **无 MCP**：未实现 Model Context Protocol
 
 ## Plan-and-Execute Agent 说明
 
@@ -377,6 +384,66 @@ curl -X POST http://localhost:8000/api/chat/sessions/{session_id}/messages \
 - **不访问外部系统**：所有数据为 demo 固定数据
 - **不实现标准完整 MCP 协议全部能力**
 
+## SSE Streaming Chat API 说明
+
+v1.0 Phase 1 新增 SSE（Server-Sent Events）流式聊天 API，支持实时流式输出。
+
+### 端点
+
+```
+POST /api/chat/sessions/{session_id}/messages/stream
+```
+
+### 请求体
+
+与非流式端点相同：
+
+```json
+{"content": "...", "mode": "rag|react|plan_execute"}
+```
+
+### 响应
+
+- Content-Type: `text/event-stream`
+- 每个 SSE 事件格式：`event: <type>\ndata: <json>\n\n`
+
+### SSE 事件类型
+
+| 事件类型 | 说明 | 数据示例 |
+|----------|------|----------|
+| `trace` | 追踪信息 | `{"trace_id": "abc123..."}` |
+| `user_message` | 用户消息 | `{"id": "...", "role": "user", "content": "..."}` |
+| `token` | 流式 token（逐字输出） | `{"token": "你"}` |
+| `citations` | 引用信息 | `{"citations": [...]}` |
+| `steps` | ReAct 步骤 | `{"steps": [...]}` |
+| `plan` | Plan-and-Execute 计划 | `{"plan": [...]}` |
+| `step_results` | Plan 执行结果 | `{"step_results": [...]}` |
+| `tool_calls` | 工具调用记录 | `{"tool_calls": [...]}` |
+| `assistant_message` | 完整 assistant 消息 | `{"id": "...", "role": "assistant", "content": "..."}` |
+| `done` | 流式结束 | `{"status": "done"}` |
+| `error` | 错误事件 | `{"error": "..."}` |
+
+### 错误处理
+
+- **Session 不存在**：返回 SSE `error` 事件
+- **空 content**：返回 HTTP 422
+
+### SSE 流式请求示例
+
+```bash
+curl -N -X POST http://localhost:8000/api/chat/sessions/{session_id}/messages/stream \
+  -H "Content-Type: application/json" \
+  -d '{"content": "What is AI?", "mode": "rag"}'
+```
+
+### SSE 流式 /tool 命令示例
+
+```bash
+curl -N -X POST http://localhost:8000/api/chat/sessions/{session_id}/messages/stream \
+  -H "Content-Type: application/json" \
+  -d '{"content": "/tool echo_tool {\"text\":\"hello\"}"}'
+```
+
 ## Web UI Tool Panel 使用说明
 
 1. 左侧边栏显示 Tool Panel
@@ -433,7 +500,8 @@ enterprise-ai-agent/
 │   │   ├── components/         # React 组件
 │   │   │   ├── ToolPanel.tsx   # 工具面板组件
 │   │   │   ├── ReActSteps.tsx  # ReAct 步骤展示组件
-│   │   │   └── PlanExecuteTrace.tsx  # Plan-Execute 追踪组件
+│   │   │   ├── PlanExecuteTrace.tsx  # Plan-Execute 追踪组件
+│   │   │   └── ChatWindow.tsx  # 聊天窗口组件（含流式开关）
 │   │   ├── App.tsx             # 主应用
 │   │   ├── types.ts            # TypeScript 类型
 │   │   └── styles.css          # 样式
@@ -454,17 +522,20 @@ enterprise-ai-agent/
 |--------|------|--------|
 | `APP_NAME` | 应用名称 | `enterprise-ai-agent` |
 | `APP_ENV` | 运行环境 | `development` |
-| `APP_VERSION` | 应用版本 | `0.2.0` |
+| `APP_VERSION` | 应用版本 | `1.0.0` |
 | `DATABASE_URL` | PostgreSQL 连接 URL | `postgresql+asyncpg://postgres:postgres@localhost:5432/enterprise_ai_agent` |
 | `REDIS_URL` | Redis 连接 URL | `redis://localhost:6379/0` |
 | `LOG_LEVEL` | 日志级别 | `INFO` |
 | `CORS_ORIGINS` | CORS 允许的源 | `["http://localhost:3000","http://localhost:5173","http://localhost:8000"]` |
 | `SECRET_KEY` | 安全密钥 | 需在生产环境更改 |
 | `LLM_PROVIDER` | LLM Provider 名称 | `fake` |
-| `OPENAI_API_KEY` | OpenAI API Key（v0.2+ 接入真实 LLM 时需要） | 空 |
-| `OPENAI_LLM_MODEL` | OpenAI LLM 模型 | `gpt-3.5-turbo` |
+| `OPENAI_API_KEY` | OpenAI API Key（openai provider 必需） | 空 |
+| `OPENAI_BASE_URL` | OpenAI 兼容服务 Base URL | `https://api.openai.com/v1` |
+| `OPENAI_LLM_MODEL` | OpenAI LLM 模型 | `gpt-4o-mini` |
 | `EMBEDDING_PROVIDER` | Embedding Provider 名称 | `fake` |
-| `OPENAI_EMBEDDING_MODEL` | OpenAI Embedding 模型 | `text-embedding-ada-002` |
+| `OPENAI_EMBEDDING_MODEL` | OpenAI Embedding 模型 | `text-embedding-3-small` |
+| `PROVIDER_TIMEOUT_SECONDS` | Provider 请求超时时间（秒） | `30` |
+| `PROVIDER_MAX_RETRIES` | Provider 请求最大重试次数 | `2` |
 | `RAG_CHUNK_SIZE` | 文本切分大小 | `800` |
 | `RAG_CHUNK_OVERLAP` | 切分重叠大小 | `100` |
 | `EMBEDDING_DIMENSION` | Embedding 维度 | `1536` |
@@ -475,11 +546,26 @@ enterprise-ai-agent/
 ### Provider 配置说明
 
 - **`LLM_PROVIDER=fake`**（默认）：使用 FakeLLMProvider，不访问网络，输出稳定。适用于开发和测试。
-- **`LLM_PROVIDER=openai`**：使用 OpenAILLMProvider 占位。当前版本仅抛出 NotImplementedError，不进行网络调用。
+- **`LLM_PROVIDER=openai`**：使用 OpenAILLMProvider，通过 httpx.Client 调用 OpenAI 兼容 API。需要设置 `OPENAI_API_KEY`，否则抛出 `ProviderConfigError`。
 - **`EMBEDDING_PROVIDER=fake`**（默认）：使用 FakeEmbeddingProvider，基于 SHA-256 hash 的确定性向量，不访问网络。
-- **`EMBEDDING_PROVIDER=openai`**：使用 OpenAIEmbeddingProvider 占位。当前版本仅抛出 NotImplementedError，不进行网络调用。
+- **`EMBEDDING_PROVIDER=openai`**：使用 OpenAIEmbeddingProvider，通过 httpx.AsyncClient 调用 OpenAI 兼容 Embedding API。需要设置 `OPENAI_API_KEY`，否则抛出 `ProviderConfigError`。
 
-**注意**：真实 Provider（OpenAI）目前只是接口占位，不会进行任何网络调用。测试环境必须使用 fake provider。
+**OpenAI 兼容服务**：通过 `OPENAI_BASE_URL` 可配置兼容 OpenAI API 的服务地址（如 Azure OpenAI、本地部署等），默认为 `https://api.openai.com/v1`。
+
+**Provider 超时和重试**：通过 `PROVIDER_TIMEOUT_SECONDS`（默认 30 秒）和 `PROVIDER_MAX_RETRIES`（默认 2 次）配置请求超时和重试策略。
+
+**注意**：测试默认使用 fake provider。真实 provider 需要用户自行提供 API key。
+
+### Provider Error 说明
+
+Provider 错误体系基于 `ProviderError` 基类，提供细粒度错误类型：
+
+| 错误类型 | 说明 | 触发场景 |
+|----------|------|----------|
+| `ProviderError` | Provider 基础错误 | 所有 Provider 错误的基类 |
+| `ProviderConfigError` | 配置错误 | `OPENAI_API_KEY` 未设置时使用 openai provider |
+| `ProviderTimeoutError` | 请求超时 | 请求超过 `PROVIDER_TIMEOUT_SECONDS` |
+| `ProviderResponseError` | 响应错误 | API 返回非 200 状态码或响应解析失败 |
 
 ### Retriever 双路径策略
 
@@ -565,6 +651,7 @@ docker compose ps
 | GET | `/api/chat/sessions/{session_id}` | 获取单个会话 |
 | GET | `/api/chat/sessions/{session_id}/messages` | 获取消息列表 |
 | POST | `/api/chat/sessions/{session_id}/messages` | 发送消息（RAG 问答、/tool 调用、ReAct 或 Plan-Execute 模式） |
+| POST | `/api/chat/sessions/{session_id}/messages/stream` | SSE 流式发送消息（支持 rag / react / plan_execute 模式） |
 
 ### Document API
 
@@ -595,6 +682,7 @@ docker compose ps
 4. 右侧聊天区域：
    - 选择会话后显示消息历史
    - 选择模式：RAG / ReAct / Plan-Exec
+   - **流式开关（Streaming Toggle）**：开启后使用 SSE 流式输出，实时显示 token
    - 输入问题并发送（RAG 问答、ReAct 工具选择或 Plan-Execute 多步计划）
    - 输入 `/tool <name> <json>` 调用工具（优先级最高）
    - 查看 assistant 回答、citations、ReAct Steps 和 Plan Trace
@@ -639,31 +727,40 @@ docker compose up -d --build
 29. 在 Chat 输入：`/tool mcp_echo {"text":"hello"}`
 30. 选择 ReAct mode，输入：`查询 revenue 业务指标`，确认调用 mcp_get_business_metric
 31. 选择 Plan-Exec mode，输入：`请先查看业务指标，再创建工单`，确认 plan 包含 MCP tools
+32. 开启流式开关（Streaming Toggle）
+33. 输入普通问题，确认 SSE 流式逐字输出 token
+34. 选择 ReAct 模式 + 流式，输入：`计算 1+2*3`，确认流式输出包含 steps 事件
+35. 选择 Plan-Exec 模式 + 流式，输入：`请先查看系统状态，再搜索文档并总结`，确认流式输出包含 plan 和 step_results 事件
+36. 流式模式下输入 `/tool echo_tool {"text":"hello"}`，确认流式输出工具结果
+37. 关闭流式开关，确认回退到非流式模式
 
-## v0.2 已知限制
+## v1.0 已知限制
 
 - **Fake LLM**：默认使用 FakeLLMProvider，不访问真实 LLM API
 - **Fake Embedding**：基于 SHA-256 hash 的确定性向量，不是语义检索
-- **OpenAI Provider 占位**：仅抛出 NotImplementedError
-- **无认证**：当前无用户认证系统
-- **无权限**：当前无权限管理
+- **测试默认使用 fake provider**：CI 和开发环境使用 fake provider
+- **真实 provider 需要用户自行提供 API key**：openai provider 需要 OPENAI_API_KEY
+- **Fake streaming 是模拟 token chunk**：fake provider 的流式输出是模拟逐字输出，非真实 LLM 流式
+- **不含认证/RBAC**：当前无用户认证和权限管理系统
 - **ReAct 是确定性规划器**：不是生产级 LLM planner，基于规则匹配
 - **Plan-and-Execute 是确定性规划器**：不是生产级 LLM planner，基于规则匹配
 - **MCP 是 demo 集成**：in-process demo server，非标准 MCP transport
 - **仅支持 .txt/.md**：不支持 PDF、DOCX 等文档格式
-- **无流式输出**：Chat API 不支持 SSE 流式响应
 
-## v0.3 / v1.0 建议方向
+## v1.0+ 后续方向
 
-1. 接入真实 LLM（如 OpenAI API）
-2. 实现 LLM 驱动的 ReAct planner（替换确定性规划器）
-3. 实现 LLM 驱动的 Plan-and-Execute planner
-4. 实现标准 MCP transport（stdio/HTTP）
-5. 实现用户认证和授权
-6. 支持 PDF、DOCX 文档格式
-7. 实现 SSE 流式输出
-8. 实现多租户
-9. 实现 Admin Dashboard
+**v1.0 Phase 1 已完成：**
+- ~~接入真实 LLM（如 OpenAI API）~~ ✅ OpenAI-compatible Provider 已实现
+- ~~实现 SSE 流式输出~~ ✅ SSE Streaming Chat API 已实现
+
+**待实现：**
+1. 实现 LLM 驱动的 ReAct planner（替换确定性规划器）
+2. 实现 LLM 驱动的 Plan-and-Execute planner
+3. 实现标准 MCP transport（stdio/HTTP）
+4. 实现用户认证和授权（RBAC）
+5. 支持 PDF、DOCX 文档格式
+6. 实现多租户
+7. 实现 Admin Dashboard
 
 ## 许可证
 

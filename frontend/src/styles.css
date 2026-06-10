@@ -634,6 +634,31 @@ button:disabled {
   height: 38px;
 }
 
+.stream-toggle {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.8125rem;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  white-space: nowrap;
+  height: 38px;
+}
+
+.stream-toggle input[type="checkbox"] {
+  margin: 0;
+  cursor: pointer;
+}
+
+.message-content.streaming {
+  border-right: 2px solid var(--color-primary);
+  animation: blink 0.7s step-end infinite;
+}
+
+@keyframes blink {
+  50% { border-color: transparent; }
+}
+
 /* Plan & Execute Trace */
 .plan-execute-trace {
   margin: 8px 0;

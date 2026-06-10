@@ -8,6 +8,7 @@ import { DocumentUpload } from './components/DocumentUpload'
 import { HealthStatus } from './components/HealthStatus'
 import { ToolPanel } from './components/ToolPanel'
 import type { Document, Message, SendMessageResponse, Session } from './types'
+import type { DocumentListResponse, MessageListResponse, SessionListResponse } from './types'
 
 export default function App() {
   const [documents, setDocuments] = useState<Document[]>([])
@@ -20,7 +21,7 @@ export default function App() {
 
   const loadDocuments = useCallback(async () => {
     try {
-      const res = await api.getDocuments()
+      const res: DocumentListResponse = await api.listDocuments() as DocumentListResponse
       setDocuments(res.documents)
     } catch {
       // ignore
@@ -29,7 +30,7 @@ export default function App() {
 
   const loadSessions = useCallback(async () => {
     try {
-      const res = await api.getSessions()
+      const res: SessionListResponse = await api.listSessions() as SessionListResponse
       setSessions(res.sessions)
     } catch {
       // ignore
@@ -38,7 +39,7 @@ export default function App() {
 
   const loadMessages = useCallback(async (sessionId: string) => {
     try {
-      const res = await api.getMessages(sessionId)
+      const res: MessageListResponse = await api.getMessages(sessionId) as MessageListResponse
       setMessageList(res.messages)
     } catch {
       // ignore
@@ -59,8 +60,8 @@ export default function App() {
   const handleCreateSession = async () => {
     setCreating(true)
     try {
-      const session = await api.createSession()
-      setSessions((prev) => [session, ...prev])
+      const session = await api.createSession() as Session
+      setSessions((prev: Session[]) => [session, ...prev])
       setSelectedSessionId(session.id)
       setMessageList([])
       setMessages(null)

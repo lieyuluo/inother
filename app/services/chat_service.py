@@ -30,6 +30,7 @@ from app.schemas.chat import (
     SessionResponse,
     StepResultResponse,
 )
+from app.schemas.chat_result import ChatResult
 from app.tools.service import ToolService
 
 # Pattern: /tool <tool_name> <json_input>
@@ -148,24 +149,45 @@ class ChatService:
         content: str,
         mode: str | None = None,
     ) -> SendMessageResponse | None:
-        """Send a message to a session.
+        """Send a message to a session (non-streaming).
 
-        Priority:
-        1. /tool command → manual tool call
-        2. mode="plan_execute" → Plan-and-Execute Agent
-        3. mode="react" → ReAct Agent
-        4. default (mode=None or mode="rag") → RAG Agent
+        Returns SendMessageResponse or None if session not found.
+        """
+        result = await self.process_message(session_id, content, mode)
+        if result is None:
+            return None
 
-        Args:
-            session_id: Chat session ID.
-            content: Message content.
-            mode: Processing mode ('rag', 'react', or 'plan_execute').
+        # Save assistant message
+        assistant_message = await self.message_repo.create(
+            session_id=session_id,
+            role="assistant",
+            content=result.answer,
+            metadata=result.assistant_metadata,
+        )
 
-        Returns:
-            SendMessageResponse or None if session not found.
+        return SendMessageResponse(
+            user_message=result.user_message,
+            assistant_message=_msg_to_response(assistant_message),
+            citations=result.citations,
+            trace_id=result.trace_id,
+            steps=result.steps,
+            tool_calls=result.tool_calls,
+            mode=result.mode,
+            plan=result.plan,
+            step_results=result.step_results,
+        )
 
-        Raises:
-            ValueError: If mode is not supported.
+    async def process_message(
+        self,
+        session_id: UUID,
+        content: str,
+        mode: str | None = None,
+    ) -> ChatResult | None:
+        """Process a message and return ChatResult.
+
+        Shared by both streaming and non-streaming endpoints.
+
+        Returns ChatResult or None if session not found.
         """
         # Validate mode
         if mode is not None and mode not in _SUPPORTED_MODES:
@@ -185,47 +207,49 @@ class ChatService:
             content=content,
         )
 
+        user_msg_resp = _msg_to_response(user_message)
+
         # Priority 1: /tool command
         tool_parse = _parse_tool_command(content)
         if tool_parse is not None:
-            return await self._handle_tool_call(
+            return await self._process_tool_call(
                 session_id=session_id,
                 tool_name=tool_parse[0],
                 tool_input=tool_parse[1],
-                user_message=user_message,
+                user_message=user_msg_resp,
             )
 
         # Priority 2: Plan-and-Execute mode
         if mode == "plan_execute":
-            return await self._handle_plan_execute_query(
+            return await self._process_plan_execute_query(
                 session_id=session_id,
                 content=content,
-                user_message=user_message,
+                user_message=user_msg_resp,
             )
 
         # Priority 3: ReAct mode
         if mode == "react":
-            return await self._handle_react_query(
+            return await self._process_react_query(
                 session_id=session_id,
                 content=content,
-                user_message=user_message,
+                user_message=user_msg_resp,
             )
 
         # Priority 4: Default RAG mode
-        return await self._handle_rag_query(
+        return await self._process_rag_query(
             session_id=session_id,
             content=content,
-            user_message=user_message,
+            user_message=user_msg_resp,
         )
 
-    async def _handle_tool_call(
+    async def _process_tool_call(
         self,
         session_id: UUID,
         tool_name: str,
         tool_input: dict[str, object],
-        user_message: ChatMessage,
-    ) -> SendMessageResponse:
-        """Handle a /tool command invocation."""
+        user_message: MessageResponse,
+    ) -> ChatResult:
+        """Process a /tool command invocation."""
         tool_service = ToolService(self.session)
         result = await tool_service.invoke_tool(
             tool_name=tool_name,
@@ -248,32 +272,34 @@ class ChatService:
             },
             "trace_id": result.trace_id,
         }
-        assistant_message = await self.message_repo.create(
-            session_id=session_id,
-            role="assistant",
-            content=answer,
-            metadata=assistant_metadata,
-        )
 
-        return SendMessageResponse(
-            user_message=_msg_to_response(user_message),
-            assistant_message=_msg_to_response(assistant_message),
-            citations=[],
+        return ChatResult(
+            user_message=user_message,
+            answer=answer,
             trace_id=result.trace_id,
             mode="tool",
+            tool_calls=[
+                {
+                    "tool_name": result.tool_name,
+                    "status": result.status,
+                    "output": result.output if result.status == "success" else None,
+                    "error": result.error if result.status != "success" else None,
+                }
+            ],
+            assistant_metadata=assistant_metadata,
+            session_id=session_id,
         )
 
-    async def _handle_plan_execute_query(
+    async def _process_plan_execute_query(
         self,
         session_id: UUID,
         content: str,
-        user_message: ChatMessage,
-    ) -> SendMessageResponse:
-        """Handle a Plan-and-Execute mode query."""
+        user_message: MessageResponse,
+    ) -> ChatResult:
+        """Process a Plan-and-Execute mode query."""
         agent = PlanExecuteAgent(session=self.session)
         result = await agent.query(content, session_id=session_id)
 
-        # Build plan step responses
         plan_responses = [
             PlanStepResponse(
                 step_index=s.step_index,
@@ -286,7 +312,6 @@ class ChatService:
             for s in result.plan
         ]
 
-        # Build step result responses
         step_result_responses = [
             StepResultResponse(
                 step_index=sr.step_index,
@@ -300,7 +325,6 @@ class ChatService:
             for sr in result.step_results
         ]
 
-        # Build citation responses
         citation_responses = [
             CitationResponse(
                 document_id=c["document_id"],
@@ -322,35 +346,30 @@ class ChatService:
             "citations": result.citations,
             "final_status": result.final_status,
         }
-        assistant_message = await self.message_repo.create(
-            session_id=session_id,
-            role="assistant",
-            content=result.answer,
-            metadata=assistant_metadata,
-        )
 
-        return SendMessageResponse(
-            user_message=_msg_to_response(user_message),
-            assistant_message=_msg_to_response(assistant_message),
+        return ChatResult(
+            user_message=user_message,
+            answer=result.answer,
             citations=citation_responses,
             trace_id=result.trace_id,
-            tool_calls=result.tool_calls,
-            mode="plan_execute",
             plan=plan_responses,
             step_results=step_result_responses,
+            tool_calls=result.tool_calls,
+            mode="plan_execute",
+            assistant_metadata=assistant_metadata,
+            session_id=session_id,
         )
 
-    async def _handle_react_query(
+    async def _process_react_query(
         self,
         session_id: UUID,
         content: str,
-        user_message: ChatMessage,
-    ) -> SendMessageResponse:
-        """Handle a ReAct mode query."""
+        user_message: MessageResponse,
+    ) -> ChatResult:
+        """Process a ReAct mode query."""
         agent = ReActAgent(session=self.session)
         result = await agent.query(content, session_id=session_id)
 
-        # Build step responses
         step_responses = [
             ReActStepResponse(
                 step_index=s.step_index,
@@ -365,7 +384,6 @@ class ChatService:
             for s in result.steps
         ]
 
-        # Build citation responses (from RAG fallback)
         citation_responses = [
             CitationResponse(
                 document_id=c["document_id"],
@@ -385,30 +403,26 @@ class ChatService:
             "tool_calls": result.tool_calls,
             "citations": result.citations,
         }
-        assistant_message = await self.message_repo.create(
-            session_id=session_id,
-            role="assistant",
-            content=result.answer,
-            metadata=assistant_metadata,
-        )
 
-        return SendMessageResponse(
-            user_message=_msg_to_response(user_message),
-            assistant_message=_msg_to_response(assistant_message),
+        return ChatResult(
+            user_message=user_message,
+            answer=result.answer,
             citations=citation_responses,
             trace_id=result.trace_id,
             steps=step_responses,
             tool_calls=result.tool_calls,
             mode="react",
+            assistant_metadata=assistant_metadata,
+            session_id=session_id,
         )
 
-    async def _handle_rag_query(
+    async def _process_rag_query(
         self,
         session_id: UUID,
         content: str,
-        user_message: ChatMessage,
-    ) -> SendMessageResponse:
-        """Handle a normal RAG query."""
+        user_message: MessageResponse,
+    ) -> ChatResult:
+        """Process a normal RAG query."""
         agent = RAGAgent(session=self.session)
         result = await agent.query(content)
 
@@ -416,12 +430,6 @@ class ChatService:
             "citations": [_citation_to_dict(c) for c in result.citations],
             "trace_id": result.trace_id,
         }
-        assistant_message = await self.message_repo.create(
-            session_id=session_id,
-            role="assistant",
-            content=result.answer,
-            metadata=assistant_metadata,
-        )
 
         await self.audit_repo.create(
             action="rag.query",
@@ -437,9 +445,9 @@ class ChatService:
             },
         )
 
-        return SendMessageResponse(
-            user_message=_msg_to_response(user_message),
-            assistant_message=_msg_to_response(assistant_message),
+        return ChatResult(
+            user_message=user_message,
+            answer=result.answer,
             citations=[
                 CitationResponse(
                     document_id=c.document_id,
@@ -453,6 +461,8 @@ class ChatService:
             ],
             trace_id=result.trace_id,
             mode="rag",
+            assistant_metadata=assistant_metadata,
+            session_id=session_id,
         )
 
 

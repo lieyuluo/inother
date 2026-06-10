@@ -14,10 +14,11 @@ export function ToolPanel({ onError }: ToolPanelProps) {
   const [loading, setLoading] = useState(false)
 
   useEffect(() => {
-    api.getTools().then((res) => {
-      setTools(res.tools)
-      if (res.tools.length > 0) {
-        setSelectedTool(res.tools[0].name)
+    api.listTools().then((res) => {
+      const tools = res.tools as ToolInfo[]
+      setTools(tools)
+      if (tools.length > 0) {
+        setSelectedTool(tools[0].name)
       }
     }).catch(() => {
       // ignore
@@ -32,7 +33,7 @@ export function ToolPanel({ onError }: ToolPanelProps) {
       if (inputText.trim()) {
         input = JSON.parse(inputText)
       }
-      const res = await api.invokeTool(selectedTool, input)
+      const res = await api.invokeTool(selectedTool, input) as ToolInvokeResponse
       setResult(res)
     } catch (e) {
       onError(e instanceof Error ? e.message : 'Tool invocation failed')
