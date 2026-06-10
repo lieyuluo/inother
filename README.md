@@ -1,10 +1,10 @@
 # Enterprise AI Agent
 
-企业级 AI Agent 后端服务 - 一个生产就绪的 FastAPI + React 应用。当前版本 v1.0 Phase 4。
+企业级 AI Agent 后端服务 - 一个生产就绪的 FastAPI + React 应用。当前版本 v1.0 Phase 5（最终阶段）。
 
 ## 项目介绍
 
-Enterprise AI Agent 是一个企业级 AI Agent 应用，提供 AI 对话、文档管理、RAG（检索增强生成）、工具调用、ReAct Agent、Plan-and-Execute Agent 和 MCP 集成功能。v1.0 Phase 4 新增了 PDF/DOCX 文档支持、文档权限与可见性、检索管线（向量/关键词/混合）、递归分块策略等。
+Enterprise AI Agent 是一个企业级 AI Agent 应用，提供 AI 对话、文档管理、RAG（检索增强生成）、工具调用、ReAct Agent、Plan-and-Execute Agent 和 MCP 集成功能。v1.0 Phase 5（最终阶段）新增了 Admin Dashboard、用户管理、Prometheus 指标端点、请求日志中间件、Admin 种子脚本、审计日志过滤等功能。
 
 ## v1.0 功能清单
 
@@ -50,6 +50,13 @@ Enterprise AI Agent 是一个企业级 AI Agent 应用，提供 AI 对话、文�
 - **RAG trace metadata（检索模式、分块策略等元数据）**
 - **Admin Documents 端点（GET /api/admin/documents）**
 - **增强版文档 UI（可见性、文件类型、chunk 数量显示）**
+- **Admin Dashboard（Overview、Users、Documents、Audit Logs、Tools、MCP Servers、Config、Metrics）**
+- **Admin 用户管理（启用/禁用、角色变更）**
+- **Admin 文档管理（所有文档含 owner 信息）**
+- **Prometheus 指标端点（GET /metrics）**
+- **请求日志中间件（method/path/status/duration_ms）**
+- **Admin 种子脚本（scripts/create_admin.py）**
+- **审计日志过滤（action、user_id、resource_type）**
 - 基础 Web UI
 - Docker Compose 一键部署
 
@@ -440,6 +447,94 @@ curl -X POST http://localhost:8000/api/chat/sessions/{session_id}/messages \
 - **非生产级 MCP transport**：未实现 stdio/HTTP 传输
 - **不访问外部系统**：所有数据为 demo 固定数据
 - **不实现标准完整 MCP 协议全部能力**
+
+## Admin Dashboard 说明
+
+v1.0 Phase 5 新增 Admin Dashboard，提供系统管理功能。所有 Admin 端点需要 `role=admin` 权限。
+
+### Overview 页面
+
+- 系统统计概览：用户数、文档数、聊天会话数、消息数、审计日志数、工具数、MCP 服务器数
+- 系统状态指示
+
+### Users 管理
+
+- 列出所有用户（不含 hashed_password）
+- 启用/禁用用户（PATCH `/api/admin/users/{user_id}`，设置 `is_active`）
+- 变更用户角色（PATCH `/api/admin/users/{user_id}`，设置 `role` 为 `user` 或 `admin`）
+
+### Documents 管理
+
+- 列出所有文档（含 owner 信息：owner_email、chunk_count）
+- 支持分页（limit/offset）
+
+### Audit Logs
+
+- 列出审计日志，支持过滤：
+  - `action`：按操作类型过滤（如 `tool.invoke`、`rag.query`、`react.run`、`plan_execute.run`）
+  - `user_id`：按用户 ID 过滤
+  - `resource_type`：按资源类型过滤（如 `tool`、`document`）
+
+### Tools 列表
+
+- 列出所有工具及其权限信息（required_role、enabled、allowed_modes、source、server_name）
+
+### MCP Servers 状态
+
+- 列出 MCP 服务器配置和健康状态（name、transport、enabled、status、tool_count）
+
+### Config 查看
+
+- 查看安全配置（不暴露任何密钥/secret）
+- 返回：app_name、app_version、app_env、auth_required、llm_provider、embedding_provider、rag_retrieval_mode、rag_chunk_strategy、rag_reranker_provider、mcp_demo_enabled
+
+### Metrics 页面
+
+- 系统指标：chat_messages_total、rag_queries_total、tool_invocations_total、react_runs_total、plan_execute_runs_total、documents_total、audit_logs_total、uptime_seconds
+
+## Admin Seed Script 说明
+
+v1.0 Phase 5 新增 Admin 种子脚本，用于创建管理员用户。
+
+### 使用方式
+
+```bash
+uv run python scripts/create_admin.py --email admin@example.com --username admin --password Admin123456
+```
+
+### 特性
+
+- **幂等**：如果用户已存在（按 email 匹配），则更新密码和角色为 admin
+- **安全**：不打印明文密码，仅输出创建/更新成功信息
+- 自动设置 `is_active=True`、`is_superuser=True`、`role=admin`
+
+## Metrics 说明
+
+v1.0 Phase 5 新增两个指标端点。
+
+### GET /api/admin/metrics
+
+- 需要 admin 权限
+- 返回 JSON 格式指标，供前端 Dashboard 展示
+- 包含：chat_messages_total、rag_queries_total、tool_invocations_total、react_runs_total、plan_execute_runs_total、documents_total、audit_logs_total、uptime_seconds
+
+### GET /metrics
+
+- 无需认证
+- 返回 Prometheus text 格式指标
+- 当前为轻量级实现，仅暴露应用信息（app_version、app_env）
+- **非生产级监控**：如需生产级 Prometheus 监控，请集成专业 Prometheus exporter
+
+## Request Logging 说明
+
+v1.0 Phase 5 新增请求日志中间件。
+
+### 行为
+
+- 对每个 HTTP 请求记录：`method path status duration_ms`
+- 示例日志：`GET /api/tools 200 12.3ms`
+- **跳过 /health**：减少健康检查噪声
+- Provider/Auth/Tool 相关日志不泄露密钥或敏感信息
 
 ## SSE Streaming Chat API 说明
 
@@ -894,8 +989,21 @@ button is disabled and an admin-role warning is shown.
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
+| GET | `/api/admin/overview` | 系统概览统计（需 admin 角色） |
+| GET | `/api/admin/users` | 列出所有用户（需 admin 角色） |
+| PATCH | `/api/admin/users/{user_id}` | 更新用户状态/角色（需 admin 角色） |
 | GET | `/api/admin/documents` | 管理员查看所有文档（需 admin 角色） |
-| GET | `/api/admin/audit-logs` | 管理员查看审计日志（需 admin 角色） |
+| GET | `/api/admin/tools` | 列出所有工具及权限信息（需 admin 角色） |
+| GET | `/api/admin/mcp-servers` | 列出 MCP 服务器状态（需 admin 角色） |
+| GET | `/api/admin/config` | 查看安全配置（需 admin 角色，不暴露密钥） |
+| GET | `/api/admin/metrics` | 系统指标 JSON 格式（需 admin 角色） |
+| GET | `/api/admin/audit-logs` | 管理员查看审计日志（需 admin 角色，支持 action/user_id/resource_type 过滤） |
+
+### Metrics API
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/metrics` | Prometheus text 格式指标（无需认证） |
 
 ### Tool API
 
@@ -978,6 +1086,22 @@ docker compose up -d --build
 46. 确认 RAG 回复中包含 trace metadata（检索模式、分块策略等信息）
 47. 使用管理员账号访问 `GET /api/admin/documents`，确认返回所有文档列表
 48. 确认文档列表 UI 显示可见性、文件类型、chunk 数量
+49. 运行 Admin 种子脚本：`uv run python scripts/create_admin.py --email admin@example.com --username admin --password Admin123456`，确认输出创建成功信息
+50. 再次运行相同命令，确认输出更新成功信息（幂等）
+51. 使用管理员 token 访问 `GET /api/admin/overview`，确认返回系统统计
+52. 使用管理员 token 访问 `GET /api/admin/users`，确认返回用户列表（不含 hashed_password）
+53. 使用管理员 token 访问 `PATCH /api/admin/users/{user_id}`，设置 `is_active=false`，确认用户被禁用
+54. 使用管理员 token 访问 `PATCH /api/admin/users/{user_id}`，设置 `role=admin`，确认角色变更成功
+55. 使用管理员 token 访问 `GET /api/admin/tools`，确认返回工具列表及权限信息
+56. 使用管理员 token 访问 `GET /api/admin/mcp-servers`，确认返回 MCP 服务器状态
+57. 使用管理员 token 访问 `GET /api/admin/config`，确认返回配置信息且不包含密钥
+58. 使用管理员 token 访问 `GET /api/admin/metrics`，确认返回 JSON 格式指标
+59. 访问 `GET /metrics`（无需认证），确认返回 Prometheus text 格式
+60. 使用管理员 token 访问 `GET /api/admin/audit-logs?action=tool.invoke`，确认按 action 过滤
+61. 使用管理员 token 访问 `GET /api/admin/audit-logs?resource_type=tool`，确认按 resource_type 过滤
+62. 使用普通用户 token 访问 `GET /api/admin/overview`，确认返回 403
+63. 查看后端日志，确认请求日志输出格式为 `method path status duration_ms`
+64. 确认日志中不包含 /health 请求
 
 ## v1.0 已知限制
 
@@ -995,6 +1119,9 @@ docker compose up -d --build
 - **无复杂 ACL**：文档权限仅支持 private/public 两级，无细粒度访问控制
 - **无团队/组织权限模型**：不支持团队或组织级别的文档共享和权限管理
 - **扫描型 PDF 不支持**：图片扫描件无法提取文本，需要 OCR
+- **Admin Dashboard 非完整管理后台**：无审批工作流、无完整 RBAC 管理界面
+- **Metrics 是轻量级实现**：非生产级 Prometheus 监控，GET /metrics 仅暴露基础应用信息
+- **Request Logging 是基础日志**：不包含请求体/响应体，不集成 APM 系统
 
 ## v1.0+ 后续方向
 
@@ -1008,16 +1135,24 @@ docker compose up -d --build
 - ~~检索管线~~ ✅ vector/keyword/hybrid 检索模式已实现
 - ~~递归分块策略~~ ✅ recursive splitting 已实现
 
+**v1.0 Phase 5 已完成：**
+- ~~Admin Dashboard~~ ✅ Overview、Users、Documents、Audit Logs、Tools、MCP Servers、Config、Metrics 已实现
+- ~~Admin 用户管理~~ ✅ 启用/禁用、角色变更已实现
+- ~~Prometheus 指标端点~~ ✅ GET /metrics 已实现
+- ~~请求日志中间件~~ ✅ method/path/status/duration_ms 已实现
+- ~~Admin 种子脚本~~ ✅ scripts/create_admin.py 已实现
+- ~~审计日志过滤~~ ✅ action/user_id/resource_type 过滤已实现
+
 **待实现：**
 1. 实现 LLM 驱动的 ReAct planner（替换确定性规划器）
 2. 实现 LLM 驱动的 Plan-and-Execute planner
 3. 实现标准 MCP transport（stdio/HTTP）
-4. 实现用户认证和授权（RBAC）
-5. 接入真实 Reranker（替换占位架构）
-6. 实现多租户
-7. 实现 Admin Dashboard
-8. 实现团队/组织权限模型
-9. 支持 OCR 扫描型 PDF
+4. 接入真实 Reranker（替换占位架构）
+5. 实现多租户
+6. 实现审批工作流
+7. 实现团队/组织权限模型
+8. 支持 OCR 扫描型 PDF
+9. 集成生产级 Prometheus exporter
 
 ## 许可证
 

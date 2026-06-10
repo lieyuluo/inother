@@ -154,3 +154,96 @@ export interface ToolInvokeResponse {
   latency_ms: number
   trace_id: string
 }
+
+// Admin types
+export interface AdminOverview {
+  users_count: number
+  documents_count: number
+  chat_sessions_count: number
+  messages_count: number
+  audit_logs_count: number
+  tools_count: number
+  mcp_servers_count: number
+  system_status: string
+}
+
+export interface AdminUser {
+  id: string
+  email: string
+  username: string
+  full_name: string | null
+  role: string
+  is_active: boolean
+  created_at: string
+}
+
+export interface AdminDocument {
+  id: string
+  title: string
+  filename: string
+  file_type: string
+  file_size: number
+  status: string
+  visibility: string
+  user_id: string
+  owner_email: string | null
+  chunk_count: number | null
+  created_at: string
+}
+
+export interface AdminTool {
+  name: string
+  description: string
+  source: string | null
+  required_role: string
+  enabled: boolean
+  allowed_modes: string[] | null
+  requires_confirmation: boolean
+  server_name: string | null
+  transport: string | null
+}
+
+export interface MCPServerStatus {
+  name: string
+  transport: string
+  enabled: boolean
+  status: string
+  tool_count: number
+  required_role: string
+}
+
+export interface AdminConfig {
+  app_name: string
+  app_version: string
+  app_env: string
+  auth_required: boolean
+  llm_provider: string
+  embedding_provider: string
+  rag_retrieval_mode: string
+  rag_chunk_strategy: string
+  rag_reranker_provider: string
+  mcp_demo_enabled: boolean
+}
+
+export interface AdminMetrics {
+  requests_total: number
+  chat_messages_total: number
+  rag_queries_total: number
+  tool_invocations_total: number
+  react_runs_total: number
+  plan_execute_runs_total: number
+  documents_total: number
+  audit_logs_total: number
+  uptime_seconds: number
+}
+
+export interface AuditLogEntry {
+  id: string
+  user_id: string | null
+  action: string
+  actor: string
+  resource_type: string | null
+  resource_id: string | null
+  metadata: Record<string, unknown> | null
+  created_at: string
+}

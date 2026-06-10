@@ -1,4 +1,16 @@
-import type { LoginResponse, RegisterRequest, User } from '../types'
+import type {
+  AdminConfig,
+  AdminDocument,
+  AdminMetrics,
+  AdminOverview,
+  AdminTool,
+  AdminUser,
+  AuditLogEntry,
+  LoginResponse,
+  MCPServerStatus,
+  RegisterRequest,
+  User,
+} from '../types'
 
 const API_BASE = import.meta.env.VITE_API_URL || ''
 const TOKEN_KEY = 'enterprise_ai_agent_token'
@@ -202,5 +214,43 @@ export const api = {
 
   async invokeTool(name: string, input: Record<string, unknown>): Promise<unknown> {
     return jsonRequest(`/api/tools/${name}/invoke`, { input }, { method: 'POST' })
+  },
+
+  // Admin API
+  async getAdminOverview(): Promise<AdminOverview> {
+    return request('/api/admin/overview')
+  },
+
+  async getAdminUsers(): Promise<{ users: AdminUser[]; total: number }> {
+    return request('/api/admin/users')
+  },
+
+  async patchAdminUser(userId: string, data: { is_active?: boolean; role?: string }): Promise<AdminUser> {
+    return jsonRequest(`/api/admin/users/${userId}`, data, { method: 'PATCH' })
+  },
+
+  async getAdminDocuments(): Promise<{ documents: AdminDocument[]; total: number }> {
+    return request('/api/admin/documents')
+  },
+
+  async getAdminTools(): Promise<{ tools: AdminTool[]; total: number }> {
+    return request('/api/admin/tools')
+  },
+
+  async getAdminMcpServers(): Promise<{ servers: MCPServerStatus[]; total: number }> {
+    return request('/api/admin/mcp-servers')
+  },
+
+  async getAdminConfig(): Promise<AdminConfig> {
+    return request('/api/admin/config')
+  },
+
+  async getAdminMetrics(): Promise<AdminMetrics> {
+    return request('/api/admin/metrics')
+  },
+
+  async getAdminAuditLogs(action?: string): Promise<{ logs: AuditLogEntry[]; total: number }> {
+    const params = action ? `?action=${encodeURIComponent(action)}` : ''
+    return request(`/api/admin/audit-logs${params}`)
   },
 }

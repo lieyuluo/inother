@@ -14,6 +14,7 @@ from app.api.routes_auth import router as auth_router
 from app.api.routes_chat import router as chat_router
 from app.api.routes_documents import router as documents_router
 from app.api.routes_health import router as health_router
+from app.api.routes_metrics import router as metrics_router
 from app.api.routes_tools import router as tools_router
 from app.core.config import get_settings
 from app.core.errors import AppException, app_exception_handler, http_exception_handler
@@ -60,6 +61,23 @@ def create_app() -> FastAPI:
             allow_headers=["*"],
         )
 
+    # Request logging middleware
+    @app.middleware("http")
+    async def request_logging_middleware(
+        request: Request, call_next: Callable[[Request], Awaitable[Response]]
+    ) -> Response:
+        import time
+
+        start = time.monotonic()
+        response = await call_next(request)
+        duration_ms = (time.monotonic() - start) * 1000
+        # Skip health check noise
+        if request.url.path != "/health":
+            logger.info(
+                f"{request.method} {request.url.path} {response.status_code} {duration_ms:.1f}ms"
+            )
+        return response
+
     # Register exception handlers
     exception_handler = cast(
         Callable[[Request, Exception], Response | Awaitable[Response]],
@@ -80,6 +98,7 @@ def create_app() -> FastAPI:
     app.include_router(chat_router)
     app.include_router(documents_router)
     app.include_router(tools_router)
+    app.include_router(metrics_router)
 
     return app
 

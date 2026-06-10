@@ -850,3 +850,182 @@ button:disabled {
 .step-field-error {
   color: var(--color-error);
 }
+
+/* Admin Dashboard */
+.admin-dashboard {
+  margin-top: 24px;
+  padding: 16px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-surface);
+}
+
+.admin-dashboard h2 {
+  margin: 0 0 12px 0;
+  font-size: 1.25rem;
+}
+
+.admin-tabs {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--color-border);
+  padding-bottom: 8px;
+}
+
+.admin-tab {
+  padding: 6px 14px;
+  font-size: 0.8125rem;
+  border-radius: 4px 4px 0 0;
+  border: 1px solid transparent;
+  cursor: pointer;
+  background: transparent;
+}
+
+.admin-tab.active {
+  background: var(--color-primary);
+  color: white;
+  border-color: var(--color-primary);
+}
+
+.admin-content {
+  min-height: 200px;
+}
+
+.admin-error {
+  color: var(--color-error, #dc2626);
+  padding: 8px;
+  font-size: 0.875rem;
+}
+
+.admin-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 12px;
+}
+
+.admin-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-bg);
+}
+
+.stat-value {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--color-primary);
+}
+
+.stat-label {
+  font-size: 0.75rem;
+  color: var(--color-text-secondary, #6b7280);
+  margin-top: 4px;
+}
+
+.admin-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8125rem;
+}
+
+.admin-table th,
+.admin-table td {
+  padding: 8px 10px;
+  text-align: left;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.admin-table th {
+  font-weight: 600;
+  background: var(--color-bg);
+}
+
+.role-badge {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 4px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.role-badge.admin {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.role-badge.user {
+  background: #e0f2fe;
+  color: #0369a1;
+}
+
+.vis-badge {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 0.7rem;
+}
+
+.vis-badge.public {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+.vis-badge.private {
+  background: #f3f4f6;
+  color: #4b5563;
+}
+
+.status-badge {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 0.7rem;
+}
+
+.status-badge.ok {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+.status-badge.disabled {
+  background: #f3f4f6;
+  color: #4b5563;
+}
+
+.status-badge.unavailable {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.btn-sm {
+  padding: 3px 8px;
+  font-size: 0.75rem;
+  margin-right: 4px;
+  cursor: pointer;
+}
+
+.config-key {
+  font-weight: 600;
+  font-family: monospace;
+}
+
+.audit-filter {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.audit-filter input {
+  padding: 6px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  font-size: 0.8125rem;
+  flex: 1;
+  max-width: 300px;
+}

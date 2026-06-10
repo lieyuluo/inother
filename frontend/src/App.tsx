@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { api } from './api/client'
 import { AuthPanel } from './components/AuthPanel'
+import { AdminDashboard } from './components/AdminDashboard'
 import { ChatSessionList } from './components/ChatSessionList'
 import { ChatWindow } from './components/ChatWindow'
 import { CitationList } from './components/CitationList'
@@ -178,6 +179,10 @@ export default function App() {
           )}
         </section>
       </main>
+
+      {currentUser && currentUser.role === 'admin' && (
+        <AdminDashboard user={currentUser} />
+      )}
     </div>
   )
 }
