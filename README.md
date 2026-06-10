@@ -632,6 +632,139 @@ docker compose up -d --build
 docker compose ps
 ```
 
+## v1.0 Phase 3: Standard MCP Transport and Tool Policy
+
+Phase 3 upgrades the previous in-process demo MCP integration into a transport
+architecture that can support multiple MCP servers. Acceptance remains centered
+on GitHub Codespaces. Local Docker Desktop is not required.
+
+### MCP Transport Architecture
+
+New transport modules live under `app/mcp/transports/`:
+
+- `in_process`: wraps the existing deterministic `DemoMCPServer`.
+- `stdio`: starts a local subprocess and communicates with JSON Lines.
+- `http`: stable placeholder and mockable extension point for future HTTP MCP.
+
+Each transport exposes:
+
+- `connect()`
+- `disconnect()`
+- `list_tools()`
+- `call_tool(tool_name, arguments)`
+- `health_check()`
+
+The bundled stdio server can be started with:
+
+```bash
+python -m app.mcp.demo_stdio_server
+```
+
+It supports `list_tools` and `call_tool` with deterministic tools:
+
+- `stdio_echo`
+- `stdio_get_status`
+
+### MCP Server Config
+
+Default config:
+
+```json
+{
+  "name": "demo",
+  "transport": "in_process",
+  "enabled": true,
+  "namespace": "mcp",
+  "required_role": "user"
+}
+```
+
+Optional extra configs can be supplied with `MCP_SERVER_CONFIGS`:
+
+```env
+MCP_SERVER_CONFIGS=[{"name":"stdio_demo","transport":"stdio","enabled":true,"namespace":"mcp","command":["python","-m","app.mcp.demo_stdio_server"]}]
+```
+
+HTTP transport is intentionally a Phase 3 placeholder. It returns stable
+"not implemented" tool-call errors and is ready for future real HTTP MCP work.
+
+### MCP Manager and Namespaces
+
+`MCPManager` loads server configs, initializes transports, discovers tools,
+checks server health, and routes tool calls.
+
+Namespaced tool examples:
+
+- `mcp.demo.echo`
+- `mcp.demo.get_business_metric`
+- `mcp.demo.create_ticket`
+- `mcp.stdio_demo.echo`
+
+Backward-compatible aliases remain available for the demo server:
+
+- `mcp_echo`
+- `mcp_get_business_metric`
+- `mcp_create_ticket`
+
+Both namespaced names and old aliases are returned by `GET /api/tools`.
+
+### ToolPolicy
+
+Tools now expose a runtime policy:
+
+- `required_role`
+- `enabled`
+- `requires_confirmation`
+- `allowed_modes`
+- `description`
+
+ToolService checks:
+
+- enabled/disabled state
+- user role
+- invocation mode: `direct`, `chat_tool`, `react`, `plan_execute`
+- confirmation requirement
+
+Confirmation UI is not implemented in Phase 3. Tools that require confirmation
+return the stable error:
+
+```text
+Tool requires confirmation, which is not implemented in v1.0 Phase 3.
+```
+
+### Tool Metadata and Audit
+
+`GET /api/tools` now includes:
+
+- `source`: `builtin` or `mcp`
+- `server_name`
+- `required_role`
+- `enabled`
+- `available`
+- `allowed_modes`
+- `namespaced_tool_name`
+
+MCP tool audit metadata includes:
+
+- `source`
+- `server_name`
+- `transport`
+- `namespaced_tool_name`
+
+### Frontend Tool Panel
+
+The Tool Panel displays source, server, required role, and canonical namespaced
+tool name. If a logged-in normal user selects an admin-only tool, the invoke
+button is disabled and an admin-role warning is shown.
+
+### Phase 3 Limits
+
+- No full enterprise MCP management dashboard.
+- No approval workflow.
+- No real third-party MCP service integration.
+- HTTP transport is a placeholder/mockable extension point.
+- Confirmation UI is not implemented.
+
 ## API 简介
 
 ### 健康检查

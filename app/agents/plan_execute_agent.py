@@ -143,19 +143,29 @@ class DeterministicPlanPlanner:
         if any(kw in q for kw in mcp_metric_keywords) and any(
             kw in q for kw in mcp_ticket_keywords
         ):
+            metric_tool = (
+                "mcp.demo.get_business_metric"
+                if "namespaced" in q or "mcp.demo" in q
+                else "mcp_get_business_metric"
+            )
+            ticket_tool = (
+                "mcp.demo.create_ticket"
+                if "namespaced" in q or "mcp.demo" in q
+                else "mcp_create_ticket"
+            )
             steps = [
                 PlanStep(
                     step_index=0,
                     description="Get business metric",
                     action_type="tool",
-                    tool_name="mcp_get_business_metric",
+                    tool_name=metric_tool,
                     tool_input={"metric": "revenue"},
                 ),
                 PlanStep(
                     step_index=1,
                     description="Create ticket",
                     action_type="tool",
-                    tool_name="mcp_create_ticket",
+                    tool_name=ticket_tool,
                     tool_input={"title": question, "description": question},
                 ),
                 PlanStep(
@@ -174,12 +184,17 @@ class DeterministicPlanPlanner:
             "\u751f\u6210\u6307\u6807\u62a5\u544a",
         ]
         if any(kw in q for kw in mcp_report_keywords):
+            metric_tool = (
+                "mcp.demo.get_business_metric"
+                if "namespaced" in q or "mcp.demo" in q
+                else "mcp_get_business_metric"
+            )
             steps = [
                 PlanStep(
                     step_index=0,
                     description="Get business metric",
                     action_type="tool",
-                    tool_name="mcp_get_business_metric",
+                    tool_name=metric_tool,
                     tool_input={"metric": "revenue"},
                 ),
                 PlanStep(
@@ -318,7 +333,12 @@ def _detect_single_tool(question: str, q: str) -> tuple[str, dict[str, object]] 
             metric = "active_users"
         elif "tickets" in q or "\u5de5\u5355\u6570" in q:
             metric = "tickets"
-        return ("mcp_get_business_metric", {"metric": metric})
+        tool_name = (
+            "mcp.demo.get_business_metric"
+            if "namespaced" in q or "mcp.demo" in q
+            else "mcp_get_business_metric"
+        )
+        return (tool_name, {"metric": metric})
 
         # MCP create ticket
     mcp_ticket_kws = [
@@ -328,7 +348,12 @@ def _detect_single_tool(question: str, q: str) -> tuple[str, dict[str, object]] 
         "\u65b0\u5efa\u5de5\u5355",
     ]
     if any(kw in q for kw in mcp_ticket_kws):
-        return ("mcp_create_ticket", {"title": question, "description": question})
+        tool_name = (
+            "mcp.demo.create_ticket"
+            if "namespaced" in q or "mcp.demo" in q
+            else "mcp_create_ticket"
+        )
+        return (tool_name, {"title": question, "description": question})
 
         # MCP echo
     if q.startswith("mcp echo ") or q.startswith("mcp_echo "):
@@ -493,6 +518,7 @@ class Executor:
                 input_data=step.tool_input,
                 actor="plan_execute_agent",
                 session_id=session_id,
+                mode="plan_execute",
             )
             latency_ms = (time.monotonic() - start) * 1000
 

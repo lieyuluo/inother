@@ -62,6 +62,7 @@ class Settings(BaseSettings):
 
     # MCP Configuration
     mcp_demo_enabled: bool = True  # Enable demo MCP tools
+    mcp_server_configs: str = ""
 
     def get_cors_origins(self) -> list[str]:
         """Parse CORS origins from string to list."""

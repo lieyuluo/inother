@@ -18,6 +18,8 @@ class MCPToolDefinition(BaseModel):
     description: str
     input_schema: dict[str, object]
     output_schema: dict[str, object] | None = None
+    required_role: str = "user"
+    source_name: str | None = None
 
 
 class MCPToolCallRequest(BaseModel):

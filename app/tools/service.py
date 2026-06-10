@@ -5,7 +5,6 @@ from uuid import UUID, uuid4
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.config import get_settings
 from app.db.models import User
 from app.db.repositories import AuditLogRepository
 from app.mcp.tool_adapter import create_mcp_tools
@@ -34,11 +33,10 @@ class ToolService:
         user_id = current_user.id if current_user is not None else None
         for tool in create_builtin_tools(session, user_id=user_id):
             self.registry.register(tool)
-        # Register MCP demo tools if enabled
-        settings = get_settings()
-        if settings.mcp_demo_enabled:
-            for tool in create_mcp_tools():
-                self.registry.register(tool)
+        # Register MCP tools through MCPManager. This includes namespaced tools
+        # and backward-compatible aliases where configured.
+        for tool in create_mcp_tools():
+            self.registry.register(tool)
 
     def list_tools(self) -> ToolListResponse:
         """List all registered tools.
@@ -54,6 +52,12 @@ class ToolService:
                 input_schema=tool.input_schema,
                 requires_confirmation=tool.requires_confirmation,
                 required_role=tool.required_role,
+                source=tool.source,
+                server_name=tool.server_name,
+                enabled=tool.enabled,
+                available=True,
+                allowed_modes=tool.allowed_modes,
+                namespaced_tool_name=tool.namespaced_tool_name,
             )
             for tool in tools
         ]
@@ -65,6 +69,7 @@ class ToolService:
         input_data: dict[str, object],
         actor: str = "system",
         session_id: UUID | None = None,
+        mode: str = "direct",
     ) -> ToolResult:
         """Invoke a tool by name and write AuditLog.
 
@@ -97,10 +102,11 @@ class ToolService:
                 result=result,
                 actor=actor,
                 session_id=session_id,
+                tool=None,
             )
             return result
 
-        permission_error = self._check_permission(tool)
+        permission_error = self._check_policy(tool, mode)
         if permission_error is not None:
             latency_ms = (time.monotonic() - start) * 1000
             result = ToolResult(
@@ -116,6 +122,7 @@ class ToolService:
                 result=result,
                 actor=actor,
                 session_id=session_id,
+                tool=tool,
             )
             return result
 
@@ -136,6 +143,7 @@ class ToolService:
                 result=result,
                 actor=actor,
                 session_id=session_id,
+                tool=tool,
             )
             return result
 
@@ -151,15 +159,23 @@ class ToolService:
             result=result,
             actor=actor,
             session_id=session_id,
+            tool=tool,
         )
 
         return result
 
-    def _check_permission(self, tool: BaseTool) -> str | None:
-        """Return an error message when the current user cannot invoke a tool."""
+    def _check_policy(self, tool: BaseTool, mode: str) -> str | None:
+        """Return an error message when policy blocks a tool invocation."""
+        policy = tool.policy
+        if not policy.enabled:
+            return f"Tool '{tool.name}' is disabled"
         role = self.current_user.role if self.current_user is not None else "user"
-        if _role_rank(role) < _role_rank(tool.required_role):
-            return f"Permission denied: tool '{tool.name}' requires role '{tool.required_role}'"
+        if _role_rank(role) < _role_rank(policy.required_role):
+            return f"Permission denied: tool '{tool.name}' requires role '{policy.required_role}'"
+        if mode not in policy.allowed_modes:
+            return f"Tool '{tool.name}' is not allowed in mode '{mode}'"
+        if policy.requires_confirmation:
+            return "Tool requires confirmation, which is not implemented in v1.0 Phase 3."
         return None
 
     def _validate_input(self, tool: BaseTool, input_data: dict[str, object]) -> str | None:
@@ -195,6 +211,7 @@ class ToolService:
         result: ToolResult,
         actor: str,
         session_id: UUID | None,  # noqa: ARG002
+        tool: BaseTool | None,
     ) -> None:
         """Write an audit log entry for a tool invocation.
 
@@ -212,6 +229,11 @@ class ToolService:
             "status": result.status,
             "latency_ms": result.latency_ms,
         }
+        if tool is not None:
+            metadata["source"] = tool.source
+            metadata["server_name"] = tool.server_name
+            metadata["transport"] = tool.transport
+            metadata["namespaced_tool_name"] = tool.namespaced_tool_name or tool.name
         if result.error:
             metadata["error"] = result.error
 

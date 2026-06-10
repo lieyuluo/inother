@@ -145,7 +145,7 @@ export default function App() {
             />
           </div>
           <div className="sidebar-section">
-            <ToolPanel onError={(msg) => setError(msg)} />
+            <ToolPanel currentUser={currentUser} onError={(msg) => setError(msg)} />
           </div>
           <div className="sidebar-section">
             <ChatSessionList

@@ -295,6 +295,7 @@ class ChatService:
             input_data=tool_input,
             actor=user.email,
             session_id=session_id,
+            mode="chat_tool",
         )
 
         if result.status == "success":

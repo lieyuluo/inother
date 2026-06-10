@@ -2,7 +2,7 @@
 
 from abc import ABC, abstractmethod
 
-from app.tools.schemas import ToolResult
+from app.tools.schemas import ToolPolicy, ToolResult
 
 
 class BaseTool(ABC):
@@ -52,6 +52,47 @@ class BaseTool(ABC):
     def required_role(self) -> str:
         """Minimum role required to invoke this tool."""
         return "user"
+
+    @property
+    def enabled(self) -> bool:
+        """Whether this tool is enabled."""
+        return True
+
+    @property
+    def allowed_modes(self) -> list[str]:
+        """Invocation modes where this tool can be used."""
+        return ["direct", "chat_tool", "react", "plan_execute"]
+
+    @property
+    def source(self) -> str:
+        """Tool source."""
+        return "builtin"
+
+    @property
+    def server_name(self) -> str | None:
+        """MCP server name when source is mcp."""
+        return None
+
+    @property
+    def transport(self) -> str | None:
+        """MCP transport name when source is mcp."""
+        return None
+
+    @property
+    def namespaced_tool_name(self) -> str | None:
+        """Canonical namespaced tool name for aliases."""
+        return None
+
+    @property
+    def policy(self) -> ToolPolicy:
+        """Runtime policy for this tool."""
+        return ToolPolicy(
+            required_role=self.required_role,
+            enabled=self.enabled,
+            requires_confirmation=self.requires_confirmation,
+            allowed_modes=self.allowed_modes,
+            description=self.description,
+        )
 
     @abstractmethod
     async def invoke(self, input_data: dict[str, object]) -> ToolResult:

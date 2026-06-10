@@ -13,14 +13,14 @@ Key components:
 
 from app.mcp.client import MCPClient
 from app.mcp.demo_server import DemoMCPServer
+from app.mcp.manager import MCPManager
 from app.mcp.schemas import MCPToolCallRequest, MCPToolCallResult, MCPToolDefinition
-from app.mcp.tool_adapter import create_mcp_tools
 
 __all__ = [
     "DemoMCPServer",
     "MCPClient",
+    "MCPManager",
     "MCPToolCallRequest",
     "MCPToolCallResult",
     "MCPToolDefinition",
-    "create_mcp_tools",
 ]

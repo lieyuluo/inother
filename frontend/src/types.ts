@@ -129,6 +129,12 @@ export interface ToolInfo {
   input_schema: Record<string, unknown>
   requires_confirmation: boolean
   required_role: 'user' | 'admin'
+  source: 'builtin' | 'mcp'
+  server_name: string | null
+  enabled: boolean
+  available: boolean
+  allowed_modes: string[]
+  namespaced_tool_name: string | null
 }
 
 export interface ToolListResponse {

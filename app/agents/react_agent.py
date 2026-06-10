@@ -159,8 +159,13 @@ class DeterministicPlanner:
                 metric = "tickets"
             elif "revenue" in q or "\u6536\u5165" in q or "\u8425\u6536" in q:
                 metric = "revenue"
+            tool_name = (
+                "mcp.demo.get_business_metric"
+                if "namespaced" in q or "mcp.demo" in q
+                else "mcp_get_business_metric"
+            )
             return (
-                "mcp_get_business_metric",
+                tool_name,
                 {"metric": metric},
                 f"Detected business metric query: {metric}",
             )
@@ -175,8 +180,13 @@ class DeterministicPlanner:
         ]
         if any(kw in q for kw in mcp_ticket_keywords):
             title = question.strip()
+            tool_name = (
+                "mcp.demo.create_ticket"
+                if "namespaced" in q or "mcp.demo" in q
+                else "mcp_create_ticket"
+            )
             return (
-                "mcp_create_ticket",
+                tool_name,
                 {"title": title, "description": title},
                 "Detected ticket creation request",
             )
@@ -304,6 +314,7 @@ class ReActAgent:
                 input_data=action_input,
                 actor="react_agent",
                 session_id=session_id,
+                mode="react",
             )
             latency_ms = (time.monotonic() - start) * 1000
 

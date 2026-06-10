@@ -495,6 +495,10 @@ button:disabled {
   font-size: 0.75rem;
 }
 
+.tool-warning {
+  color: var(--color-error);
+}
+
 .tool-input-row textarea {
   width: 100%;
   padding: 8px 12px;

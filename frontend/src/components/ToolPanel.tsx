@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react'
 import { api } from '../api/client'
-import type { ToolInfo, ToolInvokeResponse } from '../types'
+import type { ToolInfo, ToolInvokeResponse, User } from '../types'
 
 interface ToolPanelProps {
   onError: (msg: string) => void
+  currentUser: User | null
 }
 
-export function ToolPanel({ onError }: ToolPanelProps) {
+export function ToolPanel({ onError, currentUser }: ToolPanelProps) {
   const [tools, setTools] = useState<ToolInfo[]>([])
   const [selectedTool, setSelectedTool] = useState<string>('')
   const [inputText, setInputText] = useState('')
@@ -43,6 +44,9 @@ export function ToolPanel({ onError }: ToolPanelProps) {
   }
 
   const selectedToolInfo = tools.find((t) => t.name === selectedTool)
+  const insufficientRole = Boolean(
+    selectedToolInfo?.required_role === 'admin' && currentUser?.role === 'user',
+  )
 
   return (
     <div className="tool-panel">
@@ -65,7 +69,16 @@ export function ToolPanel({ onError }: ToolPanelProps) {
       {selectedToolInfo && (
         <p className="tool-description">
           {selectedToolInfo.description}
-          <span className="tool-role">Role: {selectedToolInfo.required_role}</span>
+          <span className="tool-role">
+            Source: {selectedToolInfo.source}
+            {selectedToolInfo.server_name ? ` · Server: ${selectedToolInfo.server_name}` : ''}
+            {' · '}Role: {selectedToolInfo.required_role}
+            {selectedToolInfo.namespaced_tool_name && selectedToolInfo.namespaced_tool_name !== selectedToolInfo.name
+              ? ` · Canonical: ${selectedToolInfo.namespaced_tool_name}`
+              : ''}
+          </span>
+          {!selectedToolInfo.enabled && <span className="tool-role tool-warning">Disabled</span>}
+          {insufficientRole && <span className="tool-role tool-warning">Admin role required</span>}
         </p>
       )}
       <div className="tool-input-row">
@@ -76,7 +89,7 @@ export function ToolPanel({ onError }: ToolPanelProps) {
           rows={2}
         />
       </div>
-      <button onClick={handleInvoke} disabled={loading || !selectedTool}>
+      <button onClick={handleInvoke} disabled={loading || !selectedTool || insufficientRole}>
         {loading ? 'Running...' : 'Invoke'}
       </button>
       {result && (

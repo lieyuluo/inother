@@ -35,7 +35,12 @@ async def invoke_tool(
     Returns 200 with status="error" if tool execution fails.
     """
     service = ToolService(db_session, current_user=current_user)
-    result = await service.invoke_tool(tool_name, request.input, actor=current_user.email)
+    result = await service.invoke_tool(
+        tool_name,
+        request.input,
+        actor=current_user.email,
+        mode="direct",
+    )
 
     # If tool not found, return 404
     if result.status == "error" and "not found" in (result.error or "").lower():
