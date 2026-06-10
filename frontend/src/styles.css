@@ -49,6 +49,71 @@ body {
   font-weight: 600;
 }
 
+.header-tools {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.auth-panel {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.auth-panel input {
+  width: 150px;
+  padding: 6px 8px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  font-size: 0.8125rem;
+}
+
+.auth-tabs {
+  display: flex;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.auth-tabs button {
+  border: 0;
+  border-radius: 0;
+  padding: 6px 8px;
+}
+
+.auth-tabs button.active {
+  background: var(--color-primary);
+  color: white;
+}
+
+.auth-panel-signed-in {
+  flex-wrap: nowrap;
+}
+
+.auth-user {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  min-width: 0;
+}
+
+.auth-name {
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.auth-meta {
+  font-size: 0.75rem;
+  color: var(--color-text-secondary);
+  max-width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* Health Status */
 .health-status {
   font-size: 0.875rem;
@@ -421,6 +486,13 @@ button:disabled {
   font-size: 0.8125rem;
   color: var(--color-text-secondary);
   margin-bottom: 8px;
+}
+
+.tool-role {
+  display: block;
+  margin-top: 2px;
+  font-family: monospace;
+  font-size: 0.75rem;
 }
 
 .tool-input-row textarea {

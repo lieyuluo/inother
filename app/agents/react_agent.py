@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.rag_agent import RAGAgent
 from app.agents.react_schemas import ReActResult, ReActStep
+from app.db.models import User
 from app.db.repositories import AuditLogRepository
 from app.tools.service import ToolService
 
@@ -24,7 +25,7 @@ DEFAULT_MAX_STEPS = 5
 
 # Pattern for extracting arithmetic expressions from questions with explicit keywords
 _ARITH_EXPLICIT_PATTERN = re.compile(
-    r"(?:计算|calculate|算|compute)\s*(.*)",
+    "(?:\u8ba1\u7b97|calculate|\u7b97|compute)\\s*(.*)",
     re.IGNORECASE,
 )
 
@@ -36,18 +37,7 @@ _ARITH_WHATIS_PATTERN = re.compile(
 
 
 class DeterministicPlanner:
-    """Deterministic rule-based planner for ReAct tool selection.
-
-    Rules (evaluated in order):
-    1. Arithmetic expressions → calculator_tool
-    2. Echo/回显 prefix → echo_tool
-    3. System status/health → get_system_status_tool
-    4. Search documents/知识库搜索 → search_documents_tool
-    5. No match → fallback to RAG
-
-    This is NOT a production-grade LLM planner. It uses simple pattern
-    matching for deterministic, testable behavior.
-    """
+    "Deterministic rule-based planner for ReAct tool selection.\n\n    Rules (evaluated in order):\n    1. Arithmetic expressions -> calculator_tool\n    2. Echo/\u56de\u663e prefix -> echo_tool\n    3. System status/health -> get_system_status_tool\n    4. Search documents/\u77e5\u8bc6\u5e93\u641c\u7d22 -> search_documents_tool\n    5. No match -> fallback to RAG\n\n    This is NOT a production-grade LLM planner. It uses simple pattern\n    matching for deterministic, testable behavior.\n"
 
     @staticmethod
     def plan(question: str) -> tuple[str | None, dict[str, object], str]:
@@ -63,7 +53,7 @@ class DeterministicPlanner:
         q = question.strip().lower()
 
         # Rule 1: Arithmetic expressions
-        # 1a: Explicit keywords (计算/calculate/算/compute) → always select calculator
+        # 1a: Explicit keywords (\u8ba1\u7b97/calculate/\u7b97/compute) -> always select calculator
         arith_explicit_match = _ARITH_EXPLICIT_PATTERN.search(question)
         if arith_explicit_match:
             expr = arith_explicit_match.group(1).strip()
@@ -76,7 +66,7 @@ class DeterministicPlanner:
                 f"Detected arithmetic expression: {expr}",
             )
 
-        # 1b: "what is" + digits → calculator (requires digits to disambiguate from general questions)
+            # 1b: "what is" + digits -> calculator (requires digits to disambiguate from general questions)
         arith_whatis_match = _ARITH_WHATIS_PATTERN.search(question)
         if arith_whatis_match:
             expr = arith_whatis_match.group(1).strip()
@@ -88,7 +78,7 @@ class DeterministicPlanner:
                     f"Detected arithmetic expression: {expr}",
                 )
 
-        # Also check for pure arithmetic patterns without keyword prefix
+                # Also check for pure arithmetic patterns without keyword prefix
         if re.match(r"^[\d+\-*/().%\s]+$", question.strip()) and any(
             c in question for c in "+-*/%"
         ):
@@ -99,11 +89,11 @@ class DeterministicPlanner:
                 f"Detected pure arithmetic expression: {expr}",
             )
 
-        # Rule 2: Echo
-        if q.startswith("echo ") or q.startswith("回显 "):
+            # Rule 2: Echo
+        if q.startswith("echo ") or q.startswith("\u56de\u663e "):
             text = question.strip()
             # Remove prefix
-            for prefix in ("echo ", "回显 "):
+            for prefix in ("echo ", "\u56de\u663e "):
                 if text.lower().startswith(prefix):
                     text = text[len(prefix) :].strip()
                     break
@@ -113,15 +103,15 @@ class DeterministicPlanner:
                 f"Detected echo request: {text}",
             )
 
-        # Rule 3: System status
+            # Rule 3: System status
         status_keywords = [
-            "系统状态",
+            "\u7cfb\u7edf\u72b6\u6001",
             "system status",
-            "系统信息",
+            "\u7cfb\u7edf\u4fe1\u606f",
             "system info",
             "health",
-            "健康",
-            "服务状态",
+            "\u5065\u5eb7",
+            "\u670d\u52a1\u72b6\u6001",
             "service status",
         ]
         if any(kw in q for kw in status_keywords):
@@ -131,14 +121,14 @@ class DeterministicPlanner:
                 "Detected system status query",
             )
 
-        # Rule 4: Search documents
+            # Rule 4: Search documents
         search_keywords = [
-            "搜索文档",
+            "\u641c\u7d22\u6587\u6863",
             "search documents",
-            "知识库搜索",
+            "\u77e5\u8bc6\u5e93\u641c\u7d22",
             "search knowledge",
-            "搜索知识",
-            "文档搜索",
+            "\u641c\u7d22\u77e5\u8bc6",
+            "\u6587\u6863\u641c\u7d22",
             "document search",
         ]
         if any(kw in q for kw in search_keywords):
@@ -150,24 +140,24 @@ class DeterministicPlanner:
                 "Detected document search request",
             )
 
-        # Rule 5: MCP business metric
+            # Rule 5: MCP business metric
         mcp_metric_keywords = [
             "business metric",
-            "业务指标",
+            "\u4e1a\u52a1\u6307\u6807",
             "revenue",
             "active users",
             "tickets",
-            "查询指标",
-            "指标查询",
+            "\u67e5\u8be2\u6307\u6807",
+            "\u6307\u6807\u67e5\u8be2",
         ]
         if any(kw in q for kw in mcp_metric_keywords):
             # Try to extract specific metric
             metric = "revenue"  # default
-            if "active_users" in q or "active users" in q or "用户" in q:
+            if "active_users" in q or "active users" in q or "\u7528\u6237" in q:
                 metric = "active_users"
-            elif "tickets" in q or "工单数" in q or "ticket" in q:
+            elif "tickets" in q or "\u5de5\u5355\u6570" in q or "ticket" in q:
                 metric = "tickets"
-            elif "revenue" in q or "收入" in q or "营收" in q:
+            elif "revenue" in q or "\u6536\u5165" in q or "\u8425\u6536" in q:
                 metric = "revenue"
             return (
                 "mcp_get_business_metric",
@@ -175,13 +165,13 @@ class DeterministicPlanner:
                 f"Detected business metric query: {metric}",
             )
 
-        # Rule 6: MCP create ticket
+            # Rule 6: MCP create ticket
         mcp_ticket_keywords = [
             "create ticket",
-            "创建工单",
-            "提交工单",
-            "新建工单",
-            "开工单",
+            "\u521b\u5efa\u5de5\u5355",
+            "\u63d0\u4ea4\u5de5\u5355",
+            "\u65b0\u5efa\u5de5\u5355",
+            "\u5f00\u5de5\u5355",
         ]
         if any(kw in q for kw in mcp_ticket_keywords):
             title = question.strip()
@@ -191,7 +181,7 @@ class DeterministicPlanner:
                 "Detected ticket creation request",
             )
 
-        # Rule 7: MCP echo
+            # Rule 7: MCP echo
         if q.startswith("mcp echo ") or q.startswith("mcp_echo "):
             text = question.strip()
             for prefix in ("mcp echo ", "mcp_echo "):
@@ -204,7 +194,7 @@ class DeterministicPlanner:
                 f"Detected MCP echo request: {text}",
             )
 
-        # Rule 8: No match → fallback to RAG
+            # Rule 8: No match -> fallback to RAG
         return (None, {}, "No matching tool found, falling back to RAG")
 
 
@@ -225,10 +215,12 @@ class ReActAgent:
         self,
         session: AsyncSession,
         max_steps: int = DEFAULT_MAX_STEPS,
+        current_user: User | None = None,
     ) -> None:
         self.session = session
         self.max_steps = max_steps
-        self.tool_service = ToolService(session)
+        self.current_user = current_user
+        self.tool_service = ToolService(session, current_user=current_user)
         self.planner = DeterministicPlanner()
         self.audit_repo = AuditLogRepository(session)
 
@@ -265,7 +257,10 @@ class ReActAgent:
             )
             steps.append(step)
 
-            rag_agent = RAGAgent(session=self.session)
+            rag_agent = RAGAgent(
+                session=self.session,
+                user_id=self.current_user.id if self.current_user is not None else None,
+            )
             rag_result = await rag_agent.query(question)
 
             result = ReActResult(
@@ -291,7 +286,7 @@ class ReActAgent:
             await self._write_audit_log(result, session_id, question)
             return result
 
-        # Step 2: Execute tool
+            # Step 2: Execute tool
         step_index = 0
         step = ReActStep(
             step_index=step_index,
@@ -323,7 +318,9 @@ class ReActAgent:
                 step.observation = f"Error: {tool_result.error}"
                 step.status = "error"
                 step.latency_ms = latency_ms
-                answer = f"工具 {tool_name} 执行失败：{tool_result.error}"
+                answer = (
+                    f"\u5de5\u5177 {tool_name} \u6267\u884c\u5931\u8d25\uff1a{tool_result.error}"
+                )
 
             tool_calls.append(
                 {
@@ -339,10 +336,10 @@ class ReActAgent:
             step.observation = f"Exception: {e}"
             step.status = "error"
             step.latency_ms = latency_ms
-            answer = f"工具 {tool_name} 执行异常"
+            answer = f"\u5de5\u5177 {tool_name} \u6267\u884c\u5f02\u5e38"
 
-        # Check max_steps: only truncate if we've exceeded the limit
-        # (single tool call = 1 step; max_steps=1 allows 1 step, max_steps=0 means no steps allowed)
+            # Check max_steps: only truncate if we've exceeded the limit
+            # (single tool call = 1 step; max_steps=1 allows 1 step, max_steps=0 means no steps allowed)
         if self.max_steps <= 0:
             answer = "ReAct execution stopped because max_steps was reached."
 
@@ -370,33 +367,33 @@ class ReActAgent:
             Formatted answer string.
         """
         if output is None:
-            return f"工具 {tool_name} 返回空结果"
+            return f"\u5de5\u5177 {tool_name} \u8fd4\u56de\u7a7a\u7ed3\u679c"
 
         if tool_name == "calculator_tool":
             result_val = output.get("result", "")
             expression = output.get("expression", "")
-            return f"计算结果：{expression} = {result_val}"
+            return f"\u8ba1\u7b97\u7ed3\u679c\uff1a{expression} = {result_val}"
 
         if tool_name == "echo_tool":
             text = output.get("text", "")
-            return f"回显：{text}"
+            return f"\u56de\u663e\uff1a{text}"
 
         if tool_name == "get_system_status_tool":
             service = output.get("service", "")
             version = output.get("version", "")
             env = output.get("environment", "")
             status_val = output.get("status", "")
-            return f"系统状态：{service} v{version} ({env}) - {status_val}"
+            return f"\u7cfb\u7edf\u72b6\u6001\uff1a{service} v{version} ({env}) - {status_val}"
 
         if tool_name == "search_documents_tool":
             count = output.get("count", 0)
-            return f"搜索到 {count} 条相关文档"
+            return f"\u641c\u7d22\u5230 {count} \u6761\u76f8\u5173\u6587\u6863"
 
         if tool_name == "list_documents_tool":
             count = output.get("count", 0)
-            return f"共有 {count} 个文档"
+            return f"\u5171\u6709 {count} \u4e2a\u6587\u6863"
 
-        # Generic fallback
+            # Generic fallback
         import json
 
         return f"[{tool_name}] {json.dumps(output, ensure_ascii=False, default=str)}"
@@ -426,5 +423,5 @@ class ReActAgent:
             resource_type="react_session",
             resource_id=session_id,
             metadata=metadata,
-            user_id=None,
+            user_id=self.current_user.id if self.current_user is not None else None,
         )

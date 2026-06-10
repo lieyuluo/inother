@@ -21,6 +21,7 @@ class ToolInfo(BaseModel):
     description: str
     input_schema: dict[str, object]
     requires_confirmation: bool = False
+    required_role: str = "user"
 
 
 class ToolListResponse(BaseModel):

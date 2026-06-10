@@ -10,6 +10,7 @@ Database-specific logic is encapsulated within this class.
 
 import math
 from dataclasses import dataclass
+from uuid import UUID
 
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -48,6 +49,7 @@ class Retriever:
         embedding_provider: EmbeddingProvider | None = None,
         top_k: int | None = None,
         snippet_max_length: int | None = None,
+        user_id: UUID | None = None,
     ) -> None:
         """Initialize retriever.
 
@@ -64,6 +66,7 @@ class Retriever:
         )
         self.top_k = top_k or settings.rag_top_k
         self.snippet_max_length = snippet_max_length or settings.rag_snippet_max_length
+        self.user_id = user_id
         # Detect database type from the actual session engine, not from settings.
         # This ensures SQLite test sessions always use Python cosine fallback,
         # even if settings.DATABASE_URL points to PostgreSQL.
@@ -135,13 +138,14 @@ class Retriever:
             JOIN documents d ON dc.document_id = d.id
             WHERE d.status = 'ready'
               AND dc.embedding IS NOT NULL
+              AND (:user_id IS NULL OR d.user_id = :user_id)
             ORDER BY dc.embedding <=> :query_embedding::vector
             LIMIT :limit
         """)
 
         result = await self.session.execute(
             query_sql,
-            {"query_embedding": embedding_str, "limit": self.top_k},
+            {"query_embedding": embedding_str, "limit": self.top_k, "user_id": self.user_id},
         )
         rows = result.all()
 
@@ -208,6 +212,8 @@ class Retriever:
             .where(Document.status == "ready")
             .order_by(DocumentChunk.document_id, DocumentChunk.chunk_index)
         )
+        if self.user_id is not None:
+            stmt = stmt.where(Document.user_id == self.user_id)
         result = await self.session.execute(stmt)
         rows = result.all()
         return [(row[0], row[1]) for row in rows]

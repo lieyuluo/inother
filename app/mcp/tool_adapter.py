@@ -43,6 +43,12 @@ class MCPToolAdapter(BaseTool):
     def output_schema(self) -> dict[str, object] | None:
         return self._definition.output_schema
 
+    @property
+    def required_role(self) -> str:
+        if self._definition.name == "mcp_create_ticket":
+            return "admin"
+        return "user"
+
     async def invoke(self, input_data: dict[str, object]) -> ToolResult:
         """Invoke the MCP tool through the MCP client.
 

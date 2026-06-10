@@ -765,3 +765,172 @@ docker compose up -d --build
 ## 许可证
 
 MIT License
+
+## v1.0 Phase 2: Auth, User Isolation, Basic RBAC
+
+This phase adds authentication, user-scoped data access, and basic role-based
+authorization for the internal enterprise pilot.
+
+Important environment note: Phase 2 acceptance is intended to run in GitHub
+Codespaces. Local machines do not need Docker Desktop. Docker and Docker
+Compose checks should be run in Codespaces.
+
+### Auth Features
+
+- `POST /api/auth/register`: register a user.
+- `POST /api/auth/login`: login with email/password and receive a JWT bearer token.
+- `GET /api/auth/me`: return the current authenticated user.
+- Passwords are stored with salted PBKDF2-SHA256 hashes.
+- JWT access tokens are signed with `JWT_SECRET_KEY`.
+- `ACCESS_TOKEN_EXPIRE_MINUTES` defaults to `60`.
+- API responses never expose `hashed_password`.
+
+Register example:
+
+```bash
+curl -X POST http://localhost:8000/api/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{"email":"user@example.com","username":"user1","password":"StrongPassword123","full_name":"User One"}'
+```
+
+Login example:
+
+```bash
+curl -X POST http://localhost:8000/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"user@example.com","password":"StrongPassword123"}'
+```
+
+Current user example:
+
+```bash
+curl http://localhost:8000/api/auth/me \
+  -H "Authorization: Bearer <access_token>"
+```
+
+### JWT and AUTH_REQUIRED Configuration
+
+`.env.example` includes:
+
+```env
+JWT_SECRET_KEY=dev-jwt-secret-change-in-production
+ACCESS_TOKEN_EXPIRE_MINUTES=60
+AUTH_REQUIRED=false
+```
+
+`JWT_SECRET_KEY` must be replaced for production. The default is only for local
+development and demo environments.
+
+`AUTH_REQUIRED=false` keeps historical demo flows and old tests usable without
+login. When a bearer token is provided, APIs use the real authenticated user.
+When no token is provided, Chat, Document, and Tool APIs fall back to the demo
+user. In demo mode, the demo user is admin-capable so legacy MCP ticket demos
+continue to work.
+
+`AUTH_REQUIRED=true` makes Chat, Document, and Tool APIs require login.
+
+### RBAC Roles
+
+Supported roles:
+
+- `user`: default for registered users.
+- `admin`: may be created by seed/demo scripts or tests.
+
+`role` is the primary RBAC field. `is_superuser` is retained for compatibility.
+The database constrains role values to `user` or `admin`.
+
+### User Data Isolation
+
+Chat sessions and messages are scoped to the current user. Users can list,
+fetch, and send messages only within their own sessions.
+
+Documents and document chunks are scoped to the current user. Upload, list,
+get, chunk retrieval, delete, RAG retrieval, `search_documents_tool`, and
+`list_documents_tool` all use the current user's documents when a user context
+is available.
+
+Cross-user access returns a stable 404 for Chat/Document resources.
+
+### Admin Audit Logs API
+
+`GET /api/admin/audit-logs?limit=50` requires an active admin token.
+
+```bash
+curl http://localhost:8000/api/admin/audit-logs?limit=50 \
+  -H "Authorization: Bearer <admin_access_token>"
+```
+
+Normal users receive 403. Missing/invalid tokens receive 401.
+
+### Tool Permissions
+
+`ToolInfo` now includes `required_role`.
+
+User tools:
+
+- `echo_tool`
+- `calculator_tool`
+- `search_documents_tool`
+- `get_system_status_tool`
+- `list_documents_tool`
+- `mcp_echo`
+- `mcp_get_business_metric`
+
+Admin-only tool:
+
+- `mcp_create_ticket`
+
+All Tool API, Chat `/tool`, ReAct, and Plan-and-Execute tool calls pass through
+`ToolService` permission checks and write audit logs with `user_id` when a user
+context exists.
+
+### Frontend Auth
+
+The React UI includes a compact login/register panel in the header.
+
+- Register and login from the header.
+- JWT is stored in `localStorage`.
+- API client automatically sends `Authorization: Bearer <token>`.
+- Current username/email/role are displayed after login.
+- Logout clears the token.
+- 401/403 API errors are surfaced in the error banner.
+- Demo mode remains usable when `AUTH_REQUIRED=false`.
+
+### Phase 2 Limits
+
+- No OAuth2 third-party login.
+- No enterprise SSO.
+- No complex multi-tenant model.
+- No full admin dashboard; that remains a later phase.
+- No approval workflow.
+- `AUTH_REQUIRED=false` is only for development/demo compatibility.
+
+### GitHub Codespaces Acceptance
+
+Backend:
+
+```bash
+uv sync
+uv run ruff check .
+uv run ruff format --check .
+uv run mypy app
+uv run pytest -q
+docker compose config
+```
+
+Frontend:
+
+```bash
+cd frontend
+npm ci
+npm run lint
+npm run build
+```
+
+Docker Compose acceptance in Codespaces:
+
+```bash
+cp .env.example .env
+docker compose up -d --build
+docker compose ps
+```

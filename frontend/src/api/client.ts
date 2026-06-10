@@ -1,44 +1,110 @@
+import type { LoginResponse, RegisterRequest, User } from '../types'
+
 const API_BASE = import.meta.env.VITE_API_URL || ''
+const TOKEN_KEY = 'enterprise_ai_agent_token'
+
+function getToken(): string | null {
+  return localStorage.getItem(TOKEN_KEY)
+}
+
+function setToken(token: string | null): void {
+  if (token) {
+    localStorage.setItem(TOKEN_KEY, token)
+  } else {
+    localStorage.removeItem(TOKEN_KEY)
+  }
+}
+
+async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+  const headers = new Headers(init.headers)
+  const token = getToken()
+  if (token) {
+    headers.set('Authorization', `Bearer ${token}`)
+  }
+
+  const res = await fetch(`${API_BASE}${path}`, { ...init, headers })
+  if (!res.ok) {
+    let detail = `HTTP ${res.status}`
+    try {
+      const body = await res.json()
+      if (typeof body.detail === 'string') {
+        detail = body.detail
+      }
+    } catch {
+      // keep status text fallback
+    }
+    throw new Error(detail)
+  }
+
+  if (res.status === 204) {
+    return undefined as T
+  }
+  return res.json() as Promise<T>
+}
+
+function jsonRequest<T>(path: string, body: unknown, init: RequestInit = {}): Promise<T> {
+  return request<T>(path, {
+    ...init,
+    headers: { 'Content-Type': 'application/json', ...init.headers },
+    body: JSON.stringify(body),
+  })
+}
 
 export const api = {
+  getToken,
+
+  setToken,
+
   async health(): Promise<{ status: string; service: string; version: string }> {
-    const res = await fetch(`${API_BASE}/health`)
-    return res.json()
+    return request('/health')
+  },
+
+  async register(input: RegisterRequest): Promise<User> {
+    return jsonRequest('/api/auth/register', input, { method: 'POST' })
+  },
+
+  async login(email: string, password: string): Promise<LoginResponse> {
+    const res = await jsonRequest<LoginResponse>(
+      '/api/auth/login',
+      { email, password },
+      { method: 'POST' },
+    )
+    setToken(res.access_token)
+    return res
+  },
+
+  async me(): Promise<User> {
+    return request('/api/auth/me')
+  },
+
+  logout(): void {
+    setToken(null)
   },
 
   async listDocuments(): Promise<{ documents: unknown[]; total: number }> {
-    const res = await fetch(`${API_BASE}/api/documents`)
-    return res.json()
+    return request('/api/documents')
   },
 
   async uploadDocument(file: File): Promise<unknown> {
     const formData = new FormData()
     formData.append('file', file)
-    const res = await fetch(`${API_BASE}/api/documents/upload`, { method: 'POST', body: formData })
-    return res.json()
+    return request('/api/documents/upload', { method: 'POST', body: formData })
   },
 
   async deleteDocument(id: string): Promise<void> {
-    await fetch(`${API_BASE}/api/documents/${id}`, { method: 'DELETE' })
+    await request(`/api/documents/${id}`, { method: 'DELETE' })
   },
 
   async listSessions(): Promise<{ sessions: unknown[]; total: number }> {
-    const res = await fetch(`${API_BASE}/api/chat/sessions`)
-    return res.json()
+    return request('/api/chat/sessions')
   },
 
   async createSession(title?: string): Promise<unknown> {
-    const res = await fetch(`${API_BASE}/api/chat/sessions`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(title ? { content: title } : {}),
-    })
-    return res.json()
+    return jsonRequest('/api/chat/sessions', title ? { title } : {}, { method: 'POST' })
   },
 
   async getMessages(sessionId: string): Promise<{ messages: unknown[]; total: number }> {
-    const res = await fetch(`${API_BASE}/api/chat/sessions/${sessionId}/messages`)
-    return res.json()
+    return request(`/api/chat/sessions/${sessionId}/messages`)
   },
 
   async sendMessage(
@@ -50,18 +116,9 @@ export const api = {
     if (mode && mode !== 'rag') {
       body.mode = mode
     }
-    const res = await fetch(`${API_BASE}/api/chat/sessions/${sessionId}/messages`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    })
-    return res.json()
+    return jsonRequest(`/api/chat/sessions/${sessionId}/messages`, body, { method: 'POST' })
   },
 
-  /**
-   * Send a message with SSE streaming.
-   * Uses fetch + ReadableStream to parse SSE events from POST request.
-   */
   async sendMessageStream(
     sessionId: string,
     content: string,
@@ -75,9 +132,15 @@ export const api = {
     }
 
     try {
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+      const token = getToken()
+      if (token) {
+        headers.Authorization = `Bearer ${token}`
+      }
+
       const res = await fetch(`${API_BASE}/api/chat/sessions/${sessionId}/messages/stream`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify(body),
       })
 
@@ -100,8 +163,6 @@ export const api = {
         if (done) break
 
         buffer += decoder.decode(value, { stream: true })
-
-        // Parse SSE events from buffer
         const parts = buffer.split('\n\n')
         buffer = parts.pop() || ''
 
@@ -135,16 +196,10 @@ export const api = {
   },
 
   async listTools(): Promise<{ tools: unknown[]; total: number }> {
-    const res = await fetch(`${API_BASE}/api/tools`)
-    return res.json()
+    return request('/api/tools')
   },
 
   async invokeTool(name: string, input: Record<string, unknown>): Promise<unknown> {
-    const res = await fetch(`${API_BASE}/api/tools/${name}/invoke`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ input }),
-    })
-    return res.json()
+    return jsonRequest(`/api/tools/${name}/invoke`, { input }, { method: 'POST' })
   },
 }

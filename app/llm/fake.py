@@ -2,7 +2,7 @@
 
 from app.llm.base import BaseLLMProvider
 
-FALLBACK_RESPONSE = "未在知识库中找到足够信息。"
+FALLBACK_RESPONSE = "\u672a\u5728\u77e5\u8bc6\u5e93\u4e2d\u627e\u5230\u8db3\u591f\u4fe1\u606f\u3002"
 
 
 class FakeLLMProvider(BaseLLMProvider):
@@ -28,6 +28,6 @@ class FakeLLMProvider(BaseLLMProvider):
         if not context or not context.strip():
             return FALLBACK_RESPONSE
 
-        # Truncate context summary to keep output reasonable
+            # Truncate context summary to keep output reasonable
         context_summary = context[:200].strip()
-        return f"根据知识库内容：{context_summary}"
+        return f"\u6839\u636e\u77e5\u8bc6\u5e93\u5185\u5bb9\uff1a{context_summary}"

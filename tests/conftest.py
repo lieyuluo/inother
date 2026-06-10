@@ -9,6 +9,9 @@ from uuid import uuid4
 os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///test.db")
 os.environ.setdefault("LLM_PROVIDER", "fake")
 os.environ.setdefault("EMBEDDING_PROVIDER", "fake")
+os.environ.setdefault("JWT_SECRET_KEY", "test-jwt-secret")
+os.environ.setdefault("ACCESS_TOKEN_EXPIRE_MINUTES", "60")
+os.environ.setdefault("AUTH_REQUIRED", "false")
 
 import pytest
 import pytest_asyncio
@@ -122,6 +125,7 @@ async def demo_user(async_db_session: AsyncSession) -> User:
         hashed_password="demo_hash",
         is_active=True,
         is_superuser=False,
+        role="user",
         full_name="Demo User",
     )
     async_db_session.add(user)

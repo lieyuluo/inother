@@ -63,7 +63,10 @@ export function ToolPanel({ onError }: ToolPanelProps) {
         </select>
       </div>
       {selectedToolInfo && (
-        <p className="tool-description">{selectedToolInfo.description}</p>
+        <p className="tool-description">
+          {selectedToolInfo.description}
+          <span className="tool-role">Role: {selectedToolInfo.required_role}</span>
+        </p>
       )}
       <div className="tool-input-row">
         <textarea

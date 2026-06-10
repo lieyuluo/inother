@@ -33,8 +33,11 @@ class Settings(BaseSettings):
     # CORS
     cors_origins: str = "[]"
 
-    # Security (for future phases)
+    # Security
     secret_key: str = "your-secret-key-change-in-production"
+    jwt_secret_key: str = "dev-jwt-secret-change-in-production"
+    access_token_expire_minutes: int = 60
+    auth_required: bool = False
 
     # LLM Provider Configuration
     llm_provider: str = "fake"  # 'fake' or 'openai'

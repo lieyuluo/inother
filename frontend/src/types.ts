@@ -98,12 +98,37 @@ export interface DocumentListResponse {
   total: number
 }
 
+export interface User {
+  id: string
+  email: string
+  username: string
+  full_name: string | null
+  role: 'user' | 'admin'
+  is_active: boolean
+  created_at: string
+}
+
+export interface RegisterRequest {
+  email: string
+  username: string
+  password: string
+  full_name?: string
+}
+
+export interface LoginResponse {
+  access_token: string
+  token_type: string
+  expires_in: number
+  user: User
+}
+
 // Tool types
 export interface ToolInfo {
   name: string
   description: string
   input_schema: Record<string, unknown>
   requires_confirmation: boolean
+  required_role: 'user' | 'admin'
 }
 
 export interface ToolListResponse {

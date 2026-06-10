@@ -16,6 +16,49 @@ class UserRepository:
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
 
+    async def get_by_id(self, user_id: UUID) -> User | None:
+        """Get a user by ID."""
+        stmt = select(User).where(User.id == user_id)
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none()
+
+    async def get_by_email(self, email: str) -> User | None:
+        """Get a user by email."""
+        stmt = select(User).where(User.email == email)
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none()
+
+    async def get_by_username(self, username: str) -> User | None:
+        """Get a user by username."""
+        stmt = select(User).where(User.username == username)
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none()
+
+    async def create(
+        self,
+        email: str,
+        username: str,
+        hashed_password: str,
+        full_name: str | None = None,
+        role: str = "user",
+        is_active: bool = True,
+        is_superuser: bool = False,
+    ) -> User:
+        """Create a user."""
+        user = User(
+            id=uuid4(),
+            email=email,
+            username=username,
+            hashed_password=hashed_password,
+            full_name=full_name,
+            role=role,
+            is_active=is_active,
+            is_superuser=is_superuser,
+        )
+        self.session.add(user)
+        await self.session.flush()
+        return user
+
     async def get_or_create_demo_user(self) -> User:
         """Get or create a demo user for Phase 2 development.
 
@@ -36,7 +79,8 @@ class UserRepository:
             username="demo_user",
             hashed_password="demo_password_hash_placeholder",  # Placeholder, not used for auth
             is_active=True,
-            is_superuser=False,
+            is_superuser=True,
+            role="admin",
             full_name="Demo User",
         )
         self.session.add(user)
@@ -391,6 +435,12 @@ class AuditLogRepository:
 
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
+
+    async def list_recent(self, limit: int = 50) -> list[AuditLog]:
+        """List recent audit logs ordered by newest first."""
+        stmt = select(AuditLog).order_by(desc(AuditLog.created_at)).limit(limit)
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())
 
     async def create(
         self,

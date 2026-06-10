@@ -12,7 +12,7 @@ import ast
 import operator
 import time
 from collections.abc import Callable
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -211,8 +211,9 @@ class CalculatorTool(BaseTool):
 class SearchDocumentsTool(BaseTool):
     """Search documents using the RAG Retriever."""
 
-    def __init__(self, db_session: AsyncSession) -> None:
+    def __init__(self, db_session: AsyncSession, user_id: UUID | None = None) -> None:
         self._db_session = db_session
+        self._user_id = user_id
 
     @property
     def name(self) -> str:
@@ -249,6 +250,7 @@ class SearchDocumentsTool(BaseTool):
             retriever = Retriever(
                 session=self._db_session,
                 top_k=int(top_k) if isinstance(top_k, (int, float)) else None,
+                user_id=self._user_id,
             )
             results = await retriever.similarity_search(str(query))
 
@@ -322,8 +324,9 @@ class GetSystemStatusTool(BaseTool):
 class ListDocumentsTool(BaseTool):
     """List non-deleted documents."""
 
-    def __init__(self, db_session: AsyncSession) -> None:
+    def __init__(self, db_session: AsyncSession, user_id: UUID | None = None) -> None:
         self._db_session = db_session
+        self._user_id = user_id
 
     @property
     def name(self) -> str:
@@ -351,6 +354,8 @@ class ListDocumentsTool(BaseTool):
                 .order_by(Document.created_at.desc())
                 .limit(100)
             )
+            if self._user_id is not None:
+                stmt = stmt.where(Document.user_id == self._user_id)
             result = await self._db_session.execute(stmt)
             documents = list(result.scalars().all())
 
@@ -385,7 +390,10 @@ class ListDocumentsTool(BaseTool):
             )
 
 
-def create_builtin_tools(db_session: AsyncSession) -> list[BaseTool]:
+def create_builtin_tools(
+    db_session: AsyncSession,
+    user_id: UUID | None = None,
+) -> list[BaseTool]:
     """Create instances of all built-in tools.
 
     Args:
@@ -397,7 +405,7 @@ def create_builtin_tools(db_session: AsyncSession) -> list[BaseTool]:
     return [
         EchoTool(),
         CalculatorTool(),
-        SearchDocumentsTool(db_session),
+        SearchDocumentsTool(db_session, user_id=user_id),
         GetSystemStatusTool(),
-        ListDocumentsTool(db_session),
+        ListDocumentsTool(db_session, user_id=user_id),
     ]

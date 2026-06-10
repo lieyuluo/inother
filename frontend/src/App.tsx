@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { api } from './api/client'
+import { AuthPanel } from './components/AuthPanel'
 import { ChatSessionList } from './components/ChatSessionList'
 import { ChatWindow } from './components/ChatWindow'
 import { CitationList } from './components/CitationList'
@@ -7,7 +8,7 @@ import { DocumentList } from './components/DocumentList'
 import { DocumentUpload } from './components/DocumentUpload'
 import { HealthStatus } from './components/HealthStatus'
 import { ToolPanel } from './components/ToolPanel'
-import type { Document, Message, SendMessageResponse, Session } from './types'
+import type { Document, Message, SendMessageResponse, Session, User } from './types'
 import type { DocumentListResponse, MessageListResponse, SessionListResponse } from './types'
 
 export default function App() {
@@ -18,6 +19,7 @@ export default function App() {
   const [messageList, setMessageList] = useState<Message[]>([])
   const [error, setError] = useState('')
   const [creating, setCreating] = useState(false)
+  const [currentUser, setCurrentUser] = useState<User | null>(null)
 
   const loadDocuments = useCallback(async () => {
     try {
@@ -47,9 +49,33 @@ export default function App() {
   }, [])
 
   useEffect(() => {
+    if (api.getToken()) {
+      api.me()
+        .then((user) => setCurrentUser(user))
+        .catch(() => api.logout())
+    }
     loadDocuments()
     loadSessions()
   }, [loadDocuments, loadSessions])
+
+  const handleAuthenticated = (user: User) => {
+    setCurrentUser(user)
+    setSelectedSessionId(null)
+    setMessageList([])
+    setMessages(null)
+    loadDocuments()
+    loadSessions()
+  }
+
+  const handleLogout = () => {
+    api.logout()
+    setCurrentUser(null)
+    setSelectedSessionId(null)
+    setMessageList([])
+    setMessages(null)
+    loadDocuments()
+    loadSessions()
+  }
 
   const handleSelectSession = (id: string) => {
     setSelectedSessionId(id)
@@ -87,7 +113,15 @@ export default function App() {
     <div className="app">
       <header className="app-header">
         <h1>Enterprise AI Agent</h1>
-        <HealthStatus />
+        <div className="header-tools">
+          <HealthStatus />
+          <AuthPanel
+            user={currentUser}
+            onAuthenticated={handleAuthenticated}
+            onLogout={handleLogout}
+            onError={(msg) => setError(msg)}
+          />
+        </div>
       </header>
 
       {error && (

@@ -1,5 +1,7 @@
 """RAG Agent that combines retrieval and generation for question answering."""
 
+from uuid import UUID
+
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.schemas import Citation, RAGAgentResult
@@ -28,6 +30,7 @@ class RAGAgent:
         llm_provider: BaseLLMProvider | None = None,
         top_k: int | None = None,
         snippet_max_length: int | None = None,
+        user_id: UUID | None = None,
     ) -> None:
         """Initialize RAG Agent.
 
@@ -51,6 +54,7 @@ class RAGAgent:
             embedding_provider=self.embedding_provider,
             top_k=top_k,
             snippet_max_length=snippet_max_length,
+            user_id=user_id,
         )
 
     async def query(self, question: str) -> RAGAgentResult:

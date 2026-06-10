@@ -12,7 +12,7 @@ from app.agents.rag_agent import RAGAgent
 from app.agents.react_agent import ReActAgent
 from app.agents.react_schemas import ReActStep
 from app.agents.schemas import Citation
-from app.db.models import ChatMessage
+from app.db.models import ChatMessage, ChatSession, User
 from app.db.repositories import (
     AuditLogRepository,
     ChatMessageRepository,
@@ -71,10 +71,24 @@ class ChatService:
         self.message_repo = ChatMessageRepository(session)
         self.audit_repo = AuditLogRepository(session)
 
-    async def create_session(self, title: str | None = None) -> SessionResponse:
+    async def _resolve_user(self, user: User | None = None) -> User:
+        """Resolve explicit authenticated user or fallback demo user."""
+        if user is not None:
+            return user
+        return await self.user_repo.get_or_create_demo_user()
+
+    @staticmethod
+    def _is_owner(chat_session: ChatSession, user: User) -> bool:
+        return chat_session.user_id == user.id
+
+    async def create_session(
+        self,
+        title: str | None = None,
+        user: User | None = None,
+    ) -> SessionResponse:
         """Create a new chat session."""
-        user = await self.user_repo.get_or_create_demo_user()
-        chat_session = await self.session_repo.create(user_id=user.id, title=title)
+        current_user = await self._resolve_user(user)
+        chat_session = await self.session_repo.create(user_id=current_user.id, title=title)
         return SessionResponse(
             id=chat_session.id,
             title=chat_session.title,
@@ -83,10 +97,15 @@ class ChatService:
             updated_at=chat_session.updated_at,
         )
 
-    async def get_session(self, session_id: UUID) -> SessionResponse | None:
+    async def get_session(
+        self,
+        session_id: UUID,
+        user: User | None = None,
+    ) -> SessionResponse | None:
         """Get a chat session by ID."""
+        current_user = await self._resolve_user(user)
         chat_session = await self.session_repo.get_by_id(session_id)
-        if not chat_session:
+        if not chat_session or not self._is_owner(chat_session, current_user):
             return None
         return SessionResponse(
             id=chat_session.id,
@@ -96,13 +115,18 @@ class ChatService:
             updated_at=chat_session.updated_at,
         )
 
-    async def list_sessions(self, limit: int = 100, offset: int = 0) -> SessionListResponse:
-        """List all chat sessions for the demo user."""
-        user = await self.user_repo.get_or_create_demo_user()
+    async def list_sessions(
+        self,
+        limit: int = 100,
+        offset: int = 0,
+        user: User | None = None,
+    ) -> SessionListResponse:
+        """List all chat sessions for a user."""
+        current_user = await self._resolve_user(user)
         sessions = await self.session_repo.get_all_by_user(
-            user_id=user.id, limit=limit, offset=offset
+            user_id=current_user.id, limit=limit, offset=offset
         )
-        total = await self.session_repo.count_by_user(user.id)
+        total = await self.session_repo.count_by_user(current_user.id)
         return SessionListResponse(
             sessions=[
                 SessionResponse(
@@ -118,11 +142,16 @@ class ChatService:
         )
 
     async def get_messages(
-        self, session_id: UUID, limit: int = 100, offset: int = 0
+        self,
+        session_id: UUID,
+        limit: int = 100,
+        offset: int = 0,
+        user: User | None = None,
     ) -> MessageListResponse | None:
         """Get all messages for a session."""
+        current_user = await self._resolve_user(user)
         chat_session = await self.session_repo.get_by_id(session_id)
-        if not chat_session:
+        if not chat_session or not self._is_owner(chat_session, current_user):
             return None
         messages = await self.message_repo.get_all_by_session(
             session_id=session_id, limit=limit, offset=offset
@@ -148,12 +177,14 @@ class ChatService:
         session_id: UUID,
         content: str,
         mode: str | None = None,
+        user: User | None = None,
     ) -> SendMessageResponse | None:
         """Send a message to a session (non-streaming).
 
         Returns SendMessageResponse or None if session not found.
         """
-        result = await self.process_message(session_id, content, mode)
+        current_user = await self._resolve_user(user)
+        result = await self.process_message(session_id, content, mode, user=current_user)
         if result is None:
             return None
 
@@ -182,6 +213,7 @@ class ChatService:
         session_id: UUID,
         content: str,
         mode: str | None = None,
+        user: User | None = None,
     ) -> ChatResult | None:
         """Process a message and return ChatResult.
 
@@ -195,9 +227,11 @@ class ChatService:
                 f"Unsupported mode: '{mode}'. Supported modes: {', '.join(sorted(_SUPPORTED_MODES))}"
             )
 
-        # Check if session exists
+        current_user = await self._resolve_user(user)
+
+        # Check if session exists and belongs to the current user.
         chat_session = await self.session_repo.get_by_id(session_id)
-        if not chat_session:
+        if not chat_session or not self._is_owner(chat_session, current_user):
             return None
 
         # Create user message
@@ -217,6 +251,7 @@ class ChatService:
                 tool_name=tool_parse[0],
                 tool_input=tool_parse[1],
                 user_message=user_msg_resp,
+                user=current_user,
             )
 
         # Priority 2: Plan-and-Execute mode
@@ -225,6 +260,7 @@ class ChatService:
                 session_id=session_id,
                 content=content,
                 user_message=user_msg_resp,
+                user=current_user,
             )
 
         # Priority 3: ReAct mode
@@ -233,6 +269,7 @@ class ChatService:
                 session_id=session_id,
                 content=content,
                 user_message=user_msg_resp,
+                user=current_user,
             )
 
         # Priority 4: Default RAG mode
@@ -240,6 +277,7 @@ class ChatService:
             session_id=session_id,
             content=content,
             user_message=user_msg_resp,
+            user=current_user,
         )
 
     async def _process_tool_call(
@@ -248,13 +286,14 @@ class ChatService:
         tool_name: str,
         tool_input: dict[str, object],
         user_message: MessageResponse,
+        user: User,
     ) -> ChatResult:
         """Process a /tool command invocation."""
-        tool_service = ToolService(self.session)
+        tool_service = ToolService(self.session, current_user=user)
         result = await tool_service.invoke_tool(
             tool_name=tool_name,
             input_data=tool_input,
-            actor="system",
+            actor=user.email,
             session_id=session_id,
         )
 
@@ -295,9 +334,10 @@ class ChatService:
         session_id: UUID,
         content: str,
         user_message: MessageResponse,
+        user: User,
     ) -> ChatResult:
         """Process a Plan-and-Execute mode query."""
-        agent = PlanExecuteAgent(session=self.session)
+        agent = PlanExecuteAgent(session=self.session, current_user=user)
         result = await agent.query(content, session_id=session_id)
 
         plan_responses = [
@@ -365,9 +405,10 @@ class ChatService:
         session_id: UUID,
         content: str,
         user_message: MessageResponse,
+        user: User,
     ) -> ChatResult:
         """Process a ReAct mode query."""
-        agent = ReActAgent(session=self.session)
+        agent = ReActAgent(session=self.session, current_user=user)
         result = await agent.query(content, session_id=session_id)
 
         step_responses = [
@@ -421,9 +462,10 @@ class ChatService:
         session_id: UUID,
         content: str,
         user_message: MessageResponse,
+        user: User,
     ) -> ChatResult:
         """Process a normal RAG query."""
-        agent = RAGAgent(session=self.session)
+        agent = RAGAgent(session=self.session, user_id=user.id)
         result = await agent.query(content)
 
         assistant_metadata = {
@@ -443,6 +485,7 @@ class ChatService:
                 "citations_count": len(result.citations),
                 "used_fallback": result.used_fallback,
             },
+            user_id=user.id,
         )
 
         return ChatResult(

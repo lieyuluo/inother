@@ -6,6 +6,7 @@ from uuid import UUID, uuid4
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
+from app.db.models import User
 from app.db.repositories import AuditLogRepository
 from app.mcp.tool_adapter import create_mcp_tools
 from app.tools.base import BaseTool
@@ -24,12 +25,14 @@ class ToolService:
     - Validate tool input against schema
     """
 
-    def __init__(self, session: AsyncSession) -> None:
+    def __init__(self, session: AsyncSession, current_user: User | None = None) -> None:
         self.session = session
+        self.current_user = current_user
         self.audit_repo = AuditLogRepository(session)
         self.registry = ToolRegistry()
         # Register all builtin tools
-        for tool in create_builtin_tools(session):
+        user_id = current_user.id if current_user is not None else None
+        for tool in create_builtin_tools(session, user_id=user_id):
             self.registry.register(tool)
         # Register MCP demo tools if enabled
         settings = get_settings()
@@ -50,6 +53,7 @@ class ToolService:
                 description=tool.description,
                 input_schema=tool.input_schema,
                 requires_confirmation=tool.requires_confirmation,
+                required_role=tool.required_role,
             )
             for tool in tools
         ]
@@ -84,6 +88,25 @@ class ToolService:
                 tool_name=tool_name,
                 status="error",
                 error=f"Tool '{tool_name}' not found",
+                latency_ms=latency_ms,
+                trace_id=trace_id,
+            )
+            await self._write_audit_log(
+                tool_name=tool_name,
+                input_data=input_data,
+                result=result,
+                actor=actor,
+                session_id=session_id,
+            )
+            return result
+
+        permission_error = self._check_permission(tool)
+        if permission_error is not None:
+            latency_ms = (time.monotonic() - start) * 1000
+            result = ToolResult(
+                tool_name=tool_name,
+                status="error",
+                error=permission_error,
                 latency_ms=latency_ms,
                 trace_id=trace_id,
             )
@@ -131,6 +154,13 @@ class ToolService:
         )
 
         return result
+
+    def _check_permission(self, tool: BaseTool) -> str | None:
+        """Return an error message when the current user cannot invoke a tool."""
+        role = self.current_user.role if self.current_user is not None else "user"
+        if _role_rank(role) < _role_rank(tool.required_role):
+            return f"Permission denied: tool '{tool.name}' requires role '{tool.required_role}'"
+        return None
 
     def _validate_input(self, tool: BaseTool, input_data: dict[str, object]) -> str | None:
         """Validate input data against tool schema.
@@ -191,5 +221,11 @@ class ToolService:
             resource_type="tool",
             resource_id=None,
             metadata=metadata,
-            user_id=None,
+            user_id=self.current_user.id if self.current_user is not None else None,
         )
+
+
+def _role_rank(role: str) -> int:
+    if role == "admin":
+        return 2
+    return 1

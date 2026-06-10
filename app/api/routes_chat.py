@@ -8,6 +8,8 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.security import get_request_user
+from app.db.models import User
 from app.db.session import get_db_session
 from app.schemas.chat import (
     CreateSessionRequest,
@@ -40,33 +42,41 @@ def _chunk_answer(answer: str, chunk_size: int = 5) -> list[str]:
     return chunks
 
 
-# ── Session endpoints ──────────────────────────────────────────────────
+# -- Session endpoints --------------------------------------------------
 
 
 @router.post("/sessions", status_code=status.HTTP_201_CREATED, response_model=SessionResponse)
 async def create_session(
     request: CreateSessionRequest | None = None,
     session: AsyncSession = Depends(get_db_session),
+    current_user: User = Depends(get_request_user),
 ) -> SessionResponse:
     """Create a new chat session."""
     service = ChatService(session)
     title = request.title if request else None
-    result = await service.create_session(title=title)
+    result = await service.create_session(title=title, user=current_user)
     return result
 
 
 @router.get("/sessions")
-async def list_sessions(session: AsyncSession = Depends(get_db_session)) -> SessionListResponse:
+async def list_sessions(
+    session: AsyncSession = Depends(get_db_session),
+    current_user: User = Depends(get_request_user),
+) -> SessionListResponse:
     """List all chat sessions."""
     service = ChatService(session)
-    return await service.list_sessions()
+    return await service.list_sessions(user=current_user)
 
 
 @router.get("/sessions/{session_id}")
-async def get_session(session_id: UUID, session: AsyncSession = Depends(get_db_session)) -> object:
+async def get_session(
+    session_id: UUID,
+    session: AsyncSession = Depends(get_db_session),
+    current_user: User = Depends(get_request_user),
+) -> object:
     """Get a chat session by ID."""
     service = ChatService(session)
-    result = await service.get_session(session_id)
+    result = await service.get_session(session_id, user=current_user)
     if not result:
         raise HTTPException(status_code=404, detail="Session not found")
     return result
@@ -74,17 +84,19 @@ async def get_session(session_id: UUID, session: AsyncSession = Depends(get_db_s
 
 @router.get("/sessions/{session_id}/messages")
 async def get_messages(
-    session_id: UUID, session: AsyncSession = Depends(get_db_session)
+    session_id: UUID,
+    session: AsyncSession = Depends(get_db_session),
+    current_user: User = Depends(get_request_user),
 ) -> MessageListResponse:
     """Get messages for a session."""
     service = ChatService(session)
-    result = await service.get_messages(session_id)
+    result = await service.get_messages(session_id, user=current_user)
     if not result:
         raise HTTPException(status_code=404, detail="Session not found")
     return result
 
 
-# ── Non-streaming message endpoint ────────────────────────────────────
+# -- Non-streaming message endpoint ------------------------------------
 
 
 @router.post("/sessions/{session_id}/messages", status_code=status.HTTP_201_CREATED)
@@ -92,11 +104,17 @@ async def send_message(
     session_id: UUID,
     request: SendMessageRequest,
     session: AsyncSession = Depends(get_db_session),
+    current_user: User = Depends(get_request_user),
 ) -> object:
     """Send a message to a session (non-streaming)."""
     service = ChatService(session)
     try:
-        result = await service.send_message(session_id, content=request.content, mode=request.mode)
+        result = await service.send_message(
+            session_id,
+            content=request.content,
+            mode=request.mode,
+            user=current_user,
+        )
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -108,7 +126,7 @@ async def send_message(
     return result
 
 
-# ── SSE Streaming message endpoint ────────────────────────────────────
+# -- SSE Streaming message endpoint ------------------------------------
 
 
 @router.post("/sessions/{session_id}/messages/stream")
@@ -116,13 +134,19 @@ async def send_message_stream(
     session_id: UUID,
     request: SendMessageRequest,
     session: AsyncSession = Depends(get_db_session),
+    current_user: User = Depends(get_request_user),
 ) -> StreamingResponse:
     """Send a message to a session with SSE streaming."""
     service = ChatService(session)
 
     async def event_generator() -> AsyncGenerator[str, None]:
         try:
-            result = await service.process_message(session_id, request.content, request.mode)
+            result = await service.process_message(
+                session_id,
+                request.content,
+                request.mode,
+                user=current_user,
+            )
         except ValueError as e:
             yield _sse_event("error", {"error": str(e)})
             return

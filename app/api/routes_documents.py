@@ -6,6 +6,8 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.security import get_request_user
+from app.db.models import User
 from app.db.session import get_db_session
 from app.schemas.document import (
     DocumentChunkListResponse,
@@ -32,6 +34,7 @@ async def upload_document(
     file: Annotated[UploadFile, File(description="Document file (.txt or .md)")],
     session: DBSession,
     title: Annotated[str | None, Form()] = None,
+    current_user: User = Depends(get_request_user),
 ) -> UploadResponse:
     """Upload and process a document.
 
@@ -57,6 +60,7 @@ async def upload_document(
             filename=filename,
             content=content,
             title=title,
+            user=current_user,
         )
         return result
     except ValueError as e:
@@ -77,10 +81,11 @@ async def list_documents(
     session: DBSession,
     limit: int = 100,
     offset: int = 0,
+    current_user: User = Depends(get_request_user),
 ) -> DocumentListResponse:
     """List all documents."""
     service = DocumentService(session)
-    return await service.list_documents(limit=limit, offset=offset)
+    return await service.list_documents(limit=limit, offset=offset, user=current_user)
 
 
 @router.get(
@@ -93,10 +98,11 @@ async def list_documents(
 async def get_document(
     document_id: UUID,
     session: DBSession,
+    current_user: User = Depends(get_request_user),
 ) -> DocumentResponse:
     """Get a document by ID."""
     service = DocumentService(session)
-    result = await service.get_document(document_id)
+    result = await service.get_document(document_id, user=current_user)
     if not result:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -117,6 +123,7 @@ async def get_document_chunks(
     session: DBSession,
     limit: int = 100,
     offset: int = 0,
+    current_user: User = Depends(get_request_user),
 ) -> DocumentChunkListResponse:
     """Get chunks for a document."""
     service = DocumentService(session)
@@ -124,6 +131,7 @@ async def get_document_chunks(
         document_id=document_id,
         limit=limit,
         offset=offset,
+        user=current_user,
     )
     if not result:
         raise HTTPException(
@@ -142,10 +150,11 @@ async def get_document_chunks(
 async def delete_document(
     document_id: UUID,
     session: DBSession,
+    current_user: User = Depends(get_request_user),
 ) -> None:
     """Soft delete a document."""
     service = DocumentService(session)
-    deleted = await service.delete_document(document_id)
+    deleted = await service.delete_document(document_id, user=current_user)
     if not deleted:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

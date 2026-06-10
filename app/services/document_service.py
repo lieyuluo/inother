@@ -6,6 +6,7 @@ from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
+from app.db.models import Document, User
 from app.db.repositories import (
     DocumentChunkRepository,
     DocumentRepository,
@@ -50,6 +51,7 @@ class DocumentService:
         filename: str,
         content: bytes,
         title: str | None = None,
+        user: User | None = None,
     ) -> UploadResponse:
         """Upload and process a document.
 
@@ -73,12 +75,11 @@ class DocumentService:
         if not content or len(content) == 0:
             raise ValueError("File is empty")
 
-        # Get or create demo user
-        user = await self.user_repo.get_or_create_demo_user()
+        current_user = await self._resolve_user(user)
 
         # Create document with initial status
         document = await self.document_repo.create(
-            user_id=user.id,
+            user_id=current_user.id,
             title=title or filename,
             filename=filename,
             file_type=extension,
@@ -147,8 +148,9 @@ class DocumentService:
         self,
         limit: int = 100,
         offset: int = 0,
+        user: User | None = None,
     ) -> DocumentListResponse:
-        """List all documents for the demo user.
+        """List all documents for a user.
 
         Args:
             limit: Maximum number of documents
@@ -157,14 +159,14 @@ class DocumentService:
         Returns:
             DocumentListResponse
         """
-        user = await self.user_repo.get_or_create_demo_user()
+        current_user = await self._resolve_user(user)
 
         documents = await self.document_repo.get_all_by_user(
-            user_id=user.id,
+            user_id=current_user.id,
             limit=limit,
             offset=offset,
         )
-        total = await self.document_repo.count_by_user(user.id)
+        total = await self.document_repo.count_by_user(current_user.id)
 
         return DocumentListResponse(
             documents=[
@@ -183,7 +185,11 @@ class DocumentService:
             total=total,
         )
 
-    async def get_document(self, document_id: UUID) -> DocumentResponse | None:
+    async def get_document(
+        self,
+        document_id: UUID,
+        user: User | None = None,
+    ) -> DocumentResponse | None:
         """Get a document by ID.
 
         Args:
@@ -192,8 +198,9 @@ class DocumentService:
         Returns:
             DocumentResponse or None if not found
         """
+        current_user = await self._resolve_user(user)
         document = await self.document_repo.get_by_id(document_id)
-        if not document:
+        if not document or not self._is_owner(document, current_user):
             return None
 
         return DocumentResponse(
@@ -212,6 +219,7 @@ class DocumentService:
         document_id: UUID,
         limit: int = 100,
         offset: int = 0,
+        user: User | None = None,
     ) -> DocumentChunkListResponse | None:
         """Get chunks for a document.
 
@@ -223,9 +231,10 @@ class DocumentService:
         Returns:
             DocumentChunkListResponse or None if document not found
         """
+        current_user = await self._resolve_user(user)
         # Check if document exists (exclude deleted)
         document = await self.document_repo.get_by_id(document_id)
-        if not document:
+        if not document or not self._is_owner(document, current_user):
             return None
 
         chunks = await self.chunk_repo.get_all_by_document(
@@ -251,7 +260,11 @@ class DocumentService:
             total=total,
         )
 
-    async def delete_document(self, document_id: UUID) -> bool:
+    async def delete_document(
+        self,
+        document_id: UUID,
+        user: User | None = None,
+    ) -> bool:
         """Soft delete a document.
 
         Args:
@@ -260,8 +273,9 @@ class DocumentService:
         Returns:
             True if deleted, False if not found
         """
+        current_user = await self._resolve_user(user)
         document = await self.document_repo.get_by_id(document_id, include_deleted=True)
-        if not document:
+        if not document or not self._is_owner(document, current_user):
             return False
 
         # Already deleted
@@ -270,3 +284,13 @@ class DocumentService:
 
         await self.document_repo.soft_delete(document)
         return True
+
+    async def _resolve_user(self, user: User | None = None) -> User:
+        """Resolve explicit authenticated user or fallback demo user."""
+        if user is not None:
+            return user
+        return await self.user_repo.get_or_create_demo_user()
+
+    @staticmethod
+    def _is_owner(document: Document, user: User) -> bool:
+        return document.user_id == user.id

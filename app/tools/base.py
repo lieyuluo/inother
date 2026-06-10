@@ -48,6 +48,11 @@ class BaseTool(ABC):
         """Whether this tool requires user confirmation before execution."""
         return False
 
+    @property
+    def required_role(self) -> str:
+        """Minimum role required to invoke this tool."""
+        return "user"
+
     @abstractmethod
     async def invoke(self, input_data: dict[str, object]) -> ToolResult:
         """Execute the tool with validated input.
