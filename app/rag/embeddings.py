@@ -248,6 +248,7 @@ class OpenAIEmbeddingProvider(BaseEmbeddingProvider):
         payload: dict[str, Any] = {
             "model": self._model,
             "input": text,
+            "dimensions": self._dimension,
         }
 
         url = f"{self._base_url}/embeddings"

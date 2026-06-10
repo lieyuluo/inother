@@ -7,8 +7,10 @@ from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
+from app.llm.provider import get_llm_provider
 from app.rag.embeddings import EmbeddingProvider, FakeEmbeddingProvider
 from app.rag.keyword_retriever import KeywordRetriever
+from app.rag.reranker import LLMReranker, NoopReranker
 from app.rag.retriever import RetrievalResult, Retriever
 
 
@@ -21,6 +23,7 @@ class RetrievalTrace:
     keyword_results_count: int = 0
     final_results_count: int = 0
     reranker_provider: str = "none"
+    reranker_fallback_reason: str | None = None
     filters: dict[str, object] = field(default_factory=dict)
     elapsed_ms: float = 0.0
 
@@ -76,8 +79,8 @@ class RetrievalPipeline:
             results = await self._vector_retrieve(query)
             trace.vector_results_count = len(results)
 
-        # Apply reranker (noop for now)
-        results = self._rerank(query, results)
+        results, reranker_fallback_reason = self._rerank(query, results)
+        trace.reranker_fallback_reason = reranker_fallback_reason
 
         trace.final_results_count = len(results)
         trace.elapsed_ms = (time.monotonic() - start) * 1000
@@ -134,6 +137,20 @@ class RetrievalPipeline:
 
         return results
 
-    def _rerank(self, query: str, results: list[RetrievalResult]) -> list[RetrievalResult]:  # noqa: ARG002
-        """Apply reranker. Currently noop."""
-        return results
+    def _rerank(
+        self,
+        query: str,
+        results: list[RetrievalResult],
+    ) -> tuple[list[RetrievalResult], str | None]:
+        """Apply configured reranker, falling back to no-op on failure."""
+        if self.reranker_provider == "none":
+            return NoopReranker().rerank(query, results), None
+
+        if self.reranker_provider != "llm":
+            return results, f"Unsupported reranker provider: {self.reranker_provider}"
+
+        try:
+            reranker = LLMReranker(get_llm_provider(get_settings()))
+            return reranker.rerank(query, results), None
+        except Exception as e:
+            return NoopReranker().rerank(query, results), str(e)

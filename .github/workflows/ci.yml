@@ -66,9 +66,13 @@ jobs:
         env:
           DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/enterprise_ai_agent_test
           REDIS_URL: redis://localhost:6379/0
+          RUN_POSTGRES_INTEGRATION: "1"
 
       - name: Validate docker-compose
         run: docker compose config
+        env:
+          JWT_SECRET_KEY: ci-jwt-secret-change-me-with-at-least-32-chars
+          OPENAI_API_KEY: ci-openai-api-key-placeholder
 
   frontend:
     runs-on: ubuntu-latest

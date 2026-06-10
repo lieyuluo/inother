@@ -8,13 +8,28 @@ services:
       - "8000:8000"
     environment:
       - APP_NAME=enterprise-ai-agent
-      - APP_ENV=development
-      - APP_VERSION=0.1.0
+      - APP_ENV=${APP_ENV:-production}
+      - APP_VERSION=1.0.0
       - DATABASE_URL=postgresql+asyncpg://postgres:postgres@postgres:5432/enterprise_ai_agent
       - REDIS_URL=redis://redis:6379/0
       - LOG_LEVEL=INFO
       - CORS_ORIGINS=["http://localhost:3000","http://localhost:5173","http://localhost:8000"]
-      - SECRET_KEY=dev-secret-key-change-in-production
+      - SECRET_KEY=${SECRET_KEY:-dev-secret-key-change-in-production}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:?set JWT_SECRET_KEY}
+      - AUTH_REQUIRED=true
+      - MCP_DEMO_ENABLED=false
+      - LLM_PROVIDER=${LLM_PROVIDER:-openai}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - LLM_API_KEY=${LLM_API_KEY:?set LLM_API_KEY}
+      - LLM_BASE_URL=${LLM_BASE_URL:-https://api.deepseek.com}
+      - OPENAI_BASE_URL=${OPENAI_BASE_URL:-https://api.openai.com/v1}
+      - OPENAI_LLM_MODEL=${OPENAI_LLM_MODEL:-gpt-4o-mini}
+      - EMBEDDING_PROVIDER=${EMBEDDING_PROVIDER:-openai}
+      - EMBEDDING_API_KEY=${EMBEDDING_API_KEY:?set EMBEDDING_API_KEY}
+      - EMBEDDING_BASE_URL=${EMBEDDING_BASE_URL:-https://dashscope.aliyuncs.com/compatible-mode/v1}
+      - OPENAI_EMBEDDING_MODEL=${OPENAI_EMBEDDING_MODEL:-text-embedding-3-small}
+      - AGENT_PLANNER_PROVIDER=llm
+      - RAG_RERANKER_PROVIDER=${RAG_RERANKER_PROVIDER:-llm}
     depends_on:
       postgres:
         condition: service_healthy

@@ -129,6 +129,8 @@ async def get_request_user(
     settings = get_settings()
     if settings.auth_required:
         raise _credentials_exception()
+    if settings.is_production():
+        raise _credentials_exception()
 
     return await UserRepository(session).get_or_create_demo_user()
 

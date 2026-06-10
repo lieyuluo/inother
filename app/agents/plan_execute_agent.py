@@ -14,14 +14,17 @@ from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.agents.llm_planner import LLMPlanner
 from app.agents.plan_execute_schemas import (
     PlanExecuteResult,
     PlanStep,
     StepResult,
 )
 from app.agents.rag_agent import RAGAgent
+from app.core.config import get_settings
 from app.db.models import User
 from app.db.repositories import AuditLogRepository
+from app.llm.provider import get_llm_provider
 from app.tools.service import ToolService
 
 DEFAULT_MAX_STEPS = 5
@@ -720,6 +723,8 @@ class PlanExecuteAgent:
         self.session = session
         self.max_steps = max_steps
         self.current_user = current_user
+        self.settings = get_settings()
+        self.tool_service = ToolService(session, current_user=current_user)
         self.planner = DeterministicPlanPlanner()
         self.executor = Executor(session, current_user=current_user)
         self.verifier = Verifier()
@@ -743,7 +748,7 @@ class PlanExecuteAgent:
         trace_id = str(__import__("uuid").uuid4())
 
         # Step 1: Plan
-        plan = self.planner.plan(question, max_steps=self.max_steps)
+        plan, planner_provider, fallback_reason = self._plan(question)
 
         # Step 2: Execute
         step_results: list[StepResult] = []
@@ -830,12 +835,34 @@ class PlanExecuteAgent:
             used_fallback=used_fallback,
             mode="plan_execute",
             final_status=final_status,
+            planner_provider=planner_provider,
+            fallback_reason=fallback_reason,
         )
 
         # Step 5: AuditLog
         await self._write_audit_log(result, session_id, question)
 
         return result
+
+    def _plan(self, question: str) -> tuple[list[PlanStep], str, str | None]:
+        """Plan with LLM when configured, falling back to deterministic rules."""
+        if self.settings.effective_agent_planner_provider != "llm":
+            return self.planner.plan(question, max_steps=self.max_steps), "deterministic", None
+
+        try:
+            tool_catalog = [
+                tool
+                for tool in self.tool_service.list_tools().tools
+                if tool.enabled and "plan_execute" in tool.allowed_modes
+            ]
+            plan = LLMPlanner(get_llm_provider(self.settings)).plan_execute(
+                question,
+                tool_catalog,
+                self.max_steps,
+            )
+            return plan, "llm", None
+        except Exception as e:
+            return self.planner.plan(question, max_steps=self.max_steps), "deterministic", str(e)
 
     async def _write_audit_log(
         self,
@@ -854,7 +881,10 @@ class PlanExecuteAgent:
             "citations_count": len(result.citations),
             "used_fallback": result.used_fallback,
             "final_status": result.final_status,
+            "planner_provider": result.planner_provider,
         }
+        if result.fallback_reason:
+            metadata["fallback_reason"] = result.fallback_reason
         if session_id:
             metadata["session_id"] = str(session_id)
 

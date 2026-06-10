@@ -45,8 +45,9 @@ class RAGAgent:
         self.embedding_provider = embedding_provider or get_embedding_provider(
             provider_name=settings.embedding_provider,
             dimension=settings.embedding_dimension,
-            api_key=settings.openai_api_key or None,
+            api_key=settings.effective_embedding_api_key or None,
             model=settings.openai_embedding_model,
+            base_url=settings.effective_embedding_base_url,
         )
         self.llm_provider = llm_provider or get_llm_provider(settings)
         self.pipeline = RetrievalPipeline(
@@ -104,6 +105,7 @@ class RAGAgent:
                 "keyword_results_count": trace.keyword_results_count,
                 "final_results_count": trace.final_results_count,
                 "reranker_provider": trace.reranker_provider,
+                "reranker_fallback_reason": trace.reranker_fallback_reason,
                 "filters": trace.filters,
                 "elapsed_ms": trace.elapsed_ms,
             },

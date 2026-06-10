@@ -44,3 +44,5 @@ class PlanExecuteResult:
     used_fallback: bool = False
     mode: str = "plan_execute"
     final_status: str = "success"  # success / partial_error / max_steps_reached
+    planner_provider: str = "deterministic"
+    fallback_reason: str | None = None

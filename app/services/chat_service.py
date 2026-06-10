@@ -386,7 +386,10 @@ class ChatService:
             "tool_calls": result.tool_calls,
             "citations": result.citations,
             "final_status": result.final_status,
+            "planner_provider": result.planner_provider,
         }
+        if result.fallback_reason:
+            assistant_metadata["fallback_reason"] = result.fallback_reason
 
         return ChatResult(
             user_message=user_message,
@@ -444,7 +447,10 @@ class ChatService:
             "steps": [_step_to_dict(s) for s in result.steps],
             "tool_calls": result.tool_calls,
             "citations": result.citations,
+            "planner_provider": result.planner_provider,
         }
+        if result.fallback_reason:
+            assistant_metadata["fallback_reason"] = result.fallback_reason
 
         return ChatResult(
             user_message=user_message,
@@ -485,6 +491,7 @@ class ChatService:
                 "top_k": agent.pipeline.top_k,
                 "citations_count": len(result.citations),
                 "used_fallback": result.used_fallback,
+                "retrieval_trace": result.trace,
             },
             user_id=user.id,
         )

@@ -680,6 +680,8 @@ enterprise-ai-agent/
 | `LOG_LEVEL` | 日志级别 | `INFO` |
 | `CORS_ORIGINS` | CORS 允许的源 | `["http://localhost:3000","http://localhost:5173","http://localhost:8000"]` |
 | `SECRET_KEY` | 安全密钥 | 需在生产环境更改 |
+| `JWT_SECRET_KEY` | JWT 签名密钥 | 生产环境必须替换为强密钥 |
+| `AUTH_REQUIRED` | 是否强制 JWT 认证 | `true`（生产必须为 true） |
 | `LLM_PROVIDER` | LLM Provider 名称 | `fake` |
 | `OPENAI_API_KEY` | OpenAI API Key（openai provider 必需） | 空 |
 | `OPENAI_BASE_URL` | OpenAI 兼容服务 Base URL | `https://api.openai.com/v1` |
@@ -695,7 +697,8 @@ enterprise-ai-agent/
 | `RAG_SNIPPET_MAX_LENGTH` | Citation snippet 最大长度 | `300` |
 | `RAG_CHUNK_STRATEGY` | 分块策略（fixed/recursive） | `fixed` |
 | `RAG_RETRIEVAL_MODE` | 检索模式（vector/keyword/hybrid） | `vector` |
-| `RAG_RERANKER_PROVIDER` | Reranker 提供者（none 为占位） | `none` |
+| `RAG_RERANKER_PROVIDER` | Reranker 提供者（none/llm） | `none` |
+| `AGENT_PLANNER_PROVIDER` | Agent planner（空/deterministic/llm） | 空（开发 deterministic，生产 llm） |
 | `VITE_API_BASE_URL` | 前端 API 地址 | `http://localhost:8000` |
 
 ### Provider 配置说明
@@ -817,9 +820,14 @@ npm run dev
 
 ```bash
 cp .env.example .env
+# 生产模式必须设置强 JWT_SECRET_KEY 和 OPENAI_API_KEY；API 容器会自动执行 alembic upgrade head
 docker compose up -d --build
 docker compose ps
 ```
+
+Docker Compose 默认以 `APP_ENV=production` 启动，生产配置会 fail-fast：
+`AUTH_REQUIRED=true`、`JWT_SECRET_KEY` 必须替换为强密钥、`MCP_DEMO_ENABLED=false`、
+LLM planner/reranker 启用时必须配置 `LLM_PROVIDER=openai` 和 `OPENAI_API_KEY`。
 
 ## v1.0 Phase 3: Standard MCP Transport and Tool Policy
 
@@ -1110,12 +1118,12 @@ docker compose up -d --build
 - **测试默认使用 fake provider**：CI 和开发环境使用 fake provider
 - **真实 provider 需要用户自行提供 API key**：openai provider 需要 OPENAI_API_KEY
 - **Fake streaming 是模拟 token chunk**：fake provider 的流式输出是模拟逐字输出，非真实 LLM 流式
-- **不含认证/RBAC**：当前无用户认证和权限管理系统
-- **ReAct 是确定性规划器**：不是生产级 LLM planner，基于规则匹配
-- **Plan-and-Execute 是确定性规划器**：不是生产级 LLM planner，基于规则匹配
+- **认证/RBAC 已实现但需生产强制启用**：生产环境必须设置 `AUTH_REQUIRED=true`
+- **ReAct 默认开发使用确定性规划器**：生产环境通过 `AGENT_PLANNER_PROVIDER=llm` 使用 LLM planner
+- **Plan-and-Execute 默认开发使用确定性规划器**：生产环境通过 `AGENT_PLANNER_PROVIDER=llm` 使用 LLM planner
 - **MCP 是 demo 集成**：in-process demo server，非标准 MCP transport
 - **Hybrid 检索是轻量级实现**：不是生产级 Elasticsearch 级别的混合检索
-- **Reranker 是占位架构**：当前 `RAG_RERANKER_PROVIDER=none`，未接入真实 Reranker
+- **Reranker 默认关闭**：可通过 `RAG_RERANKER_PROVIDER=llm` 启用 LLM JSON reranker，失败时回退 no-op
 - **无复杂 ACL**：文档权限仅支持 private/public 两级，无细粒度访问控制
 - **无团队/组织权限模型**：不支持团队或组织级别的文档共享和权限管理
 - **扫描型 PDF 不支持**：图片扫描件无法提取文本，需要 OCR
@@ -1207,11 +1215,11 @@ curl http://localhost:8000/api/auth/me \
 ```env
 JWT_SECRET_KEY=dev-jwt-secret-change-in-production
 ACCESS_TOKEN_EXPIRE_MINUTES=60
-AUTH_REQUIRED=false
+AUTH_REQUIRED=true
 ```
 
-`JWT_SECRET_KEY` must be replaced for production. The default is only for local
-development and demo environments.
+`JWT_SECRET_KEY` must be replaced for production. Production startup fails if
+the secret is still the default value or is too short.
 
 `AUTH_REQUIRED=false` keeps historical demo flows and old tests usable without
 login. When a bearer token is provided, APIs use the real authenticated user.
@@ -1219,7 +1227,8 @@ When no token is provided, Chat, Document, and Tool APIs fall back to the demo
 user. In demo mode, the demo user is admin-capable so legacy MCP ticket demos
 continue to work.
 
-`AUTH_REQUIRED=true` makes Chat, Document, and Tool APIs require login.
+`AUTH_REQUIRED=true` makes Chat, Document, and Tool APIs require login. In
+`APP_ENV=production`, demo-user fallback is disabled even if misconfigured.
 
 ### RBAC Roles
 

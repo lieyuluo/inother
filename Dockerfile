@@ -32,12 +32,14 @@ RUN uv sync --no-dev --no-install-project
 COPY app ./app
 COPY alembic ./alembic
 COPY alembic.ini .
+COPY scripts/docker-entrypoint.sh ./scripts/docker-entrypoint.sh
 
 # Install the project after source files are available
 RUN uv sync --no-dev
 
 # Create non-root user for security
-RUN useradd --create-home --shell /bin/bash appuser \
+RUN chmod +x /app/scripts/docker-entrypoint.sh \
+    && useradd --create-home --shell /bin/bash appuser \
     && chown -R appuser:appuser /app
 USER appuser
 
@@ -48,5 +50,5 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:8000/health || exit 1
 
-# Run the application
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Run migrations, then the application
+CMD ["/app/scripts/docker-entrypoint.sh"]

@@ -9,5 +9,10 @@ export default defineConfig({
     watch: {
       usePolling: true,
     },
+    proxy: {
+      '/api': 'http://localhost:8000',
+      '/health': 'http://localhost:8000',
+      '/metrics': 'http://localhost:8000',
+    },
   },
 })

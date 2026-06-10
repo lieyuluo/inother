@@ -30,9 +30,9 @@ def get_llm_provider(settings: Settings | None = None) -> BaseLLMProvider:
         return FakeLLMProvider()
     elif provider_name == "openai":
         return OpenAILLMProvider(
-            api_key=settings.openai_api_key or None,
+            api_key=settings.effective_llm_api_key or None,
             model=settings.openai_llm_model,
-            base_url=settings.openai_base_url,
+            base_url=settings.effective_llm_base_url,
             timeout=settings.provider_timeout_seconds,
             max_retries=settings.provider_max_retries,
         )

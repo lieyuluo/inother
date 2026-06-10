@@ -14,10 +14,13 @@ from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.agents.llm_planner import LLMPlanner
 from app.agents.rag_agent import RAGAgent
 from app.agents.react_schemas import ReActResult, ReActStep
+from app.core.config import get_settings
 from app.db.models import User
 from app.db.repositories import AuditLogRepository
+from app.llm.provider import get_llm_provider
 from app.tools.service import ToolService
 
 # Maximum steps allowed in ReAct execution
@@ -233,6 +236,7 @@ class ReActAgent:
         self.tool_service = ToolService(session, current_user=current_user)
         self.planner = DeterministicPlanner()
         self.audit_repo = AuditLogRepository(session)
+        self.settings = get_settings()
 
     async def query(
         self,
@@ -253,7 +257,7 @@ class ReActAgent:
         tool_calls: list[dict[str, object]] = []
 
         # Step 1: Plan - determine which tool to use
-        tool_name, action_input, thought = self.planner.plan(question)
+        tool_name, action_input, thought, planner_provider, fallback_reason = self._plan(question)
 
         if tool_name is None:
             # Fallback to RAG
@@ -291,6 +295,8 @@ class ReActAgent:
                 trace_id=trace_id,
                 used_fallback=True,
                 mode="react",
+                planner_provider=planner_provider,
+                fallback_reason=fallback_reason,
             )
 
             await self._write_audit_log(result, session_id, question)
@@ -362,10 +368,32 @@ class ReActAgent:
             trace_id=trace_id,
             used_fallback=False,
             mode="react",
+            planner_provider=planner_provider,
+            fallback_reason=fallback_reason,
         )
 
         await self._write_audit_log(result, session_id, question)
         return result
+
+    def _plan(self, question: str) -> tuple[str | None, dict[str, object], str, str, str | None]:
+        """Plan with LLM when configured, falling back to deterministic rules."""
+        if self.settings.effective_agent_planner_provider != "llm":
+            tool_name, action_input, thought = self.planner.plan(question)
+            return tool_name, action_input, thought, "deterministic", None
+
+        try:
+            tool_catalog = [
+                tool
+                for tool in self.tool_service.list_tools().tools
+                if tool.enabled and "react" in tool.allowed_modes
+            ]
+            decision = LLMPlanner(get_llm_provider(self.settings)).plan_react(
+                question, tool_catalog
+            )
+            return decision.tool_name, decision.action_input, decision.thought, "llm", None
+        except Exception as e:
+            tool_name, action_input, thought = self.planner.plan(question)
+            return tool_name, action_input, thought, "deterministic", str(e)
 
     def _format_tool_answer(self, tool_name: str, output: dict[str, object] | None) -> str:
         """Format a tool result into a human-readable answer.
@@ -424,7 +452,10 @@ class ReActAgent:
             "tool_calls_count": len(result.tool_calls),
             "used_fallback": result.used_fallback,
             "final_status": result.steps[-1].status if result.steps else "unknown",
+            "planner_provider": result.planner_provider,
         }
+        if result.fallback_reason:
+            metadata["fallback_reason"] = result.fallback_reason
         if session_id:
             metadata["session_id"] = str(session_id)
 

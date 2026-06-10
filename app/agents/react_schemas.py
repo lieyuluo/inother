@@ -31,3 +31,5 @@ class ReActResult:
     trace_id: str = field(default_factory=lambda: str(uuid4()))
     used_fallback: bool = False
     mode: str = "react"
+    planner_provider: str = "deterministic"
+    fallback_reason: str | None = None

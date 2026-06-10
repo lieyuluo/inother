@@ -43,8 +43,9 @@ class DocumentService:
         self.embedding_provider = get_embedding_provider(
             provider_name=settings.embedding_provider,
             dimension=settings.embedding_dimension,
-            api_key=settings.openai_api_key or None,
+            api_key=settings.effective_embedding_api_key or None,
             model=settings.openai_embedding_model,
+            base_url=settings.effective_embedding_base_url,
         )
 
     async def upload_document(
