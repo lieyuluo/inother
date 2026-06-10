@@ -12,7 +12,7 @@ import math
 from dataclasses import dataclass
 from uuid import UUID
 
-from sqlalchemy import select, text
+from sqlalchemy import or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
@@ -138,7 +138,7 @@ class Retriever:
             JOIN documents d ON dc.document_id = d.id
             WHERE d.status = 'ready'
               AND dc.embedding IS NOT NULL
-              AND (:user_id IS NULL OR d.user_id = :user_id)
+              AND (:user_id IS NULL OR d.visibility = 'public' OR d.user_id = :user_id)
             ORDER BY dc.embedding <=> :query_embedding::vector
             LIMIT :limit
         """)
@@ -213,7 +213,9 @@ class Retriever:
             .order_by(DocumentChunk.document_id, DocumentChunk.chunk_index)
         )
         if self.user_id is not None:
-            stmt = stmt.where(Document.user_id == self.user_id)
+            stmt = stmt.where(
+                or_(Document.visibility == "public", Document.user_id == self.user_id)
+            )
         result = await self.session.execute(stmt)
         rows = result.all()
         return [(row[0], row[1]) for row in rows]

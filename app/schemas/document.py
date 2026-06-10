@@ -16,6 +16,10 @@ class DocumentResponse(BaseModel):
     file_type: str
     file_size: int
     status: str
+    visibility: str = "private"
+    chunk_count: int | None = None
+    user_id: UUID | None = None
+    parser_name: str | None = None
     created_at: datetime
     updated_at: datetime | None
 
@@ -38,6 +42,10 @@ class DocumentChunkResponse(BaseModel):
     chunk_index: int
     content: str
     token_count: int | None
+    start_char: int | None = None
+    end_char: int | None = None
+    page_number: int | None = None
+    section_title: str | None = None
     created_at: datetime
     updated_at: datetime | None
 

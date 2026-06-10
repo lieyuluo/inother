@@ -12,7 +12,7 @@ from app.db.repositories import (
     DocumentRepository,
     UserRepository,
 )
-from app.rag.chunking import TextChunker
+from app.rag.chunking import get_chunker
 from app.rag.embeddings import get_embedding_provider
 from app.rag.loaders import get_loader_for_extension, is_supported_extension
 from app.schemas.document import (
@@ -35,7 +35,8 @@ class DocumentService:
 
         # Initialize RAG components
         settings = get_settings()
-        self.chunker = TextChunker(
+        self.chunker = get_chunker(
+            strategy=settings.rag_chunk_strategy,
             chunk_size=settings.rag_chunk_size,
             chunk_overlap=settings.rag_chunk_overlap,
         )
@@ -52,6 +53,7 @@ class DocumentService:
         content: bytes,
         title: str | None = None,
         user: User | None = None,
+        visibility: str = "private",
     ) -> UploadResponse:
         """Upload and process a document.
 
@@ -59,6 +61,7 @@ class DocumentService:
             filename: Original filename
             content: Raw file content
             title: Optional document title
+            visibility: Document visibility ('private' or 'public')
 
         Returns:
             UploadResponse with document and chunks count
@@ -75,6 +78,10 @@ class DocumentService:
         if not content or len(content) == 0:
             raise ValueError("File is empty")
 
+        # Validate visibility
+        if visibility not in ("private", "public"):
+            raise ValueError(f"Invalid visibility: {visibility}. Must be 'private' or 'public'")
+
         current_user = await self._resolve_user(user)
 
         # Create document with initial status
@@ -86,6 +93,7 @@ class DocumentService:
             file_size=len(content),
             content_hash=hashlib.sha256(content).hexdigest(),
             status="processing",
+            visibility=visibility,
         )
 
         try:
@@ -119,8 +127,18 @@ class DocumentService:
 
             await self.chunk_repo.create_batch(chunks_data)
 
-            # Update document status to ready
+            # Update document status to ready and store metadata
+            chunks_count = len(chunks)
             await self.document_repo.update_status(document, "ready")
+
+            # Store chunk_count and parser_name in document metadata
+            document.meta = {
+                **(document.meta or {}),
+                "chunk_count": chunks_count,
+                "parser_name": extension,
+            }
+            await self.session.flush()
+            await self.session.refresh(document)
 
         except Exception as e:
             # Update document status to failed
@@ -138,6 +156,10 @@ class DocumentService:
                 file_type=document.file_type,
                 file_size=document.file_size,
                 status=document.status,
+                visibility=document.visibility,
+                chunk_count=chunks_count,
+                user_id=document.user_id,
+                parser_name=extension,
                 created_at=document.created_at,
                 updated_at=document.updated_at,
             ),
@@ -150,7 +172,9 @@ class DocumentService:
         offset: int = 0,
         user: User | None = None,
     ) -> DocumentListResponse:
-        """List all documents for a user.
+        """List documents accessible to a user.
+
+        Shows user's own documents (private + public) and other users' public documents.
 
         Args:
             limit: Maximum number of documents
@@ -161,27 +185,15 @@ class DocumentService:
         """
         current_user = await self._resolve_user(user)
 
-        documents = await self.document_repo.get_all_by_user(
+        documents = await self.document_repo.get_accessible_by_user(
             user_id=current_user.id,
             limit=limit,
             offset=offset,
         )
-        total = await self.document_repo.count_by_user(current_user.id)
+        total = await self.document_repo.count_accessible_by_user(current_user.id)
 
         return DocumentListResponse(
-            documents=[
-                DocumentResponse(
-                    id=d.id,
-                    title=d.title,
-                    filename=d.filename,
-                    file_type=d.file_type,
-                    file_size=d.file_size,
-                    status=d.status,
-                    created_at=d.created_at,
-                    updated_at=d.updated_at,
-                )
-                for d in documents
-            ],
+            documents=[self._build_document_response(d) for d in documents],
             total=total,
         )
 
@@ -192,6 +204,8 @@ class DocumentService:
     ) -> DocumentResponse | None:
         """Get a document by ID.
 
+        Allows access to own documents and public documents from other users.
+
         Args:
             document_id: Document UUID
 
@@ -200,19 +214,14 @@ class DocumentService:
         """
         current_user = await self._resolve_user(user)
         document = await self.document_repo.get_by_id(document_id)
-        if not document or not self._is_owner(document, current_user):
+        if not document:
             return None
 
-        return DocumentResponse(
-            id=document.id,
-            title=document.title,
-            filename=document.filename,
-            file_type=document.file_type,
-            file_size=document.file_size,
-            status=document.status,
-            created_at=document.created_at,
-            updated_at=document.updated_at,
-        )
+        # Allow access if owner or document is public
+        if not self._is_owner(document, current_user) and document.visibility != "public":
+            return None
+
+        return self._build_document_response(document)
 
     async def get_document_chunks(
         self,
@@ -222,6 +231,8 @@ class DocumentService:
         user: User | None = None,
     ) -> DocumentChunkListResponse | None:
         """Get chunks for a document.
+
+        Allows access to own documents and public documents from other users.
 
         Args:
             document_id: Document UUID
@@ -234,7 +245,11 @@ class DocumentService:
         current_user = await self._resolve_user(user)
         # Check if document exists (exclude deleted)
         document = await self.document_repo.get_by_id(document_id)
-        if not document or not self._is_owner(document, current_user):
+        if not document:
+            return None
+
+        # Allow access if owner or document is public
+        if not self._is_owner(document, current_user) and document.visibility != "public":
             return None
 
         chunks = await self.chunk_repo.get_all_by_document(
@@ -267,6 +282,8 @@ class DocumentService:
     ) -> bool:
         """Soft delete a document.
 
+        Only the owner or an admin can delete a document.
+
         Args:
             document_id: Document UUID
 
@@ -275,7 +292,11 @@ class DocumentService:
         """
         current_user = await self._resolve_user(user)
         document = await self.document_repo.get_by_id(document_id, include_deleted=True)
-        if not document or not self._is_owner(document, current_user):
+        if not document:
+            return False
+
+        # Only owner or admin can delete
+        if not self._is_owner(document, current_user) and current_user.role != "admin":
             return False
 
         # Already deleted
@@ -294,3 +315,21 @@ class DocumentService:
     @staticmethod
     def _is_owner(document: Document, user: User) -> bool:
         return document.user_id == user.id
+
+    def _build_document_response(self, d: Document) -> DocumentResponse:
+        """Build DocumentResponse from a Document model."""
+        meta = d.meta or {}
+        return DocumentResponse(
+            id=d.id,
+            title=d.title,
+            filename=d.filename,
+            file_type=d.file_type,
+            file_size=d.file_size,
+            status=d.status,
+            visibility=d.visibility,
+            chunk_count=meta.get("chunk_count"),
+            user_id=d.user_id,
+            parser_name=meta.get("parser_name"),
+            created_at=d.created_at,
+            updated_at=d.updated_at,
+        )

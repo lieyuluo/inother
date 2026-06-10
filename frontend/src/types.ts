@@ -11,6 +11,10 @@ export interface Document {
   file_type: string
   file_size: number
   status: string
+  visibility: string
+  chunk_count: number | null
+  user_id: string | null
+  parser_name: string | null
   created_at: string
   updated_at: string | null
 }

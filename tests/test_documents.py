@@ -48,12 +48,12 @@ class TestUploadDocument:
 
     def test_upload_unsupported_type_returns_400(self, client: TestClient) -> None:
         """Test uploading unsupported file type returns 400."""
-        content = b"PDF content placeholder"
+        content = b"Unsupported content"
         file = io.BytesIO(content)
 
         response = client.post(
             "/api/documents/upload",
-            files={"file": ("test.pdf", file, "application/pdf")},
+            files={"file": ("test.xyz", file, "application/octet-stream")},
         )
 
         assert response.status_code == 400

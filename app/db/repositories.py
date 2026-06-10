@@ -4,7 +4,7 @@ from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID, uuid4
 
-from sqlalchemy import asc, desc, func, select
+from sqlalchemy import asc, desc, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import AuditLog, ChatMessage, ChatSession, Document, DocumentChunk, User
@@ -228,6 +228,7 @@ class DocumentRepository:
         content_hash: str | None = None,
         status: str = "pending",
         metadata: dict[str, Any] | None = None,
+        visibility: str = "private",
     ) -> Document:
         """Create a new document."""
         document = Document(
@@ -240,6 +241,7 @@ class DocumentRepository:
             content_hash=content_hash,
             status=status,
             meta=metadata,
+            visibility=visibility,
         )
         self.session.add(document)
         await self.session.flush()
@@ -299,6 +301,51 @@ class DocumentRepository:
         stmt = select(func.count(Document.id)).where(Document.user_id == user_id)
         if not include_deleted:
             stmt = stmt.where(Document.status != "deleted")
+        result = await self.session.execute(stmt)
+        return result.scalar_one() or 0
+
+    async def get_accessible_by_user(
+        self,
+        user_id: UUID,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> list[Document]:
+        """Get documents accessible to a user: own documents + public documents."""
+        stmt = (
+            select(Document)
+            .where(Document.status != "deleted")
+            .where(or_(Document.user_id == user_id, Document.visibility == "public"))
+            .order_by(desc(Document.created_at))
+            .limit(limit)
+            .offset(offset)
+        )
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())
+
+    async def count_accessible_by_user(self, user_id: UUID) -> int:
+        """Count documents accessible to a user: own documents + public documents."""
+        stmt = select(func.count(Document.id)).where(
+            Document.status != "deleted",
+            or_(Document.user_id == user_id, Document.visibility == "public"),
+        )
+        result = await self.session.execute(stmt)
+        return result.scalar_one() or 0
+
+    async def get_all(self, limit: int = 100, offset: int = 0) -> list[Document]:
+        """Get all non-deleted documents (admin only)."""
+        stmt = (
+            select(Document)
+            .where(Document.status != "deleted")
+            .order_by(desc(Document.created_at))
+            .limit(limit)
+            .offset(offset)
+        )
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())
+
+    async def count_all(self) -> int:
+        """Count all non-deleted documents (admin only)."""
+        stmt = select(func.count(Document.id)).where(Document.status != "deleted")
         result = await self.session.execute(stmt)
         return result.scalar_one() or 0
 

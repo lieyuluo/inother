@@ -14,7 +14,7 @@ import time
 from collections.abc import Callable
 from uuid import UUID, uuid4
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
@@ -355,7 +355,9 @@ class ListDocumentsTool(BaseTool):
                 .limit(100)
             )
             if self._user_id is not None:
-                stmt = stmt.where(Document.user_id == self._user_id)
+                stmt = stmt.where(
+                    or_(Document.user_id == self._user_id, Document.visibility == "public")
+                )
             result = await self._db_session.execute(stmt)
             documents = list(result.scalars().all())
 

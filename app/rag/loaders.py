@@ -93,6 +93,58 @@ class MarkdownLoader(DocumentLoader):
         return text
 
 
+class PDFLoader(DocumentLoader):
+    """Loader for PDF files (.pdf) using pypdf."""
+
+    SUPPORTED_EXTENSIONS = ["pdf"]
+
+    def load(self, content: bytes, filename: str) -> str:
+        try:
+            from io import BytesIO
+
+            from pypdf import PdfReader
+
+            reader = PdfReader(BytesIO(content))
+            pages = []
+            for page in reader.pages:
+                text = page.extract_text()
+                if text and text.strip():
+                    pages.append(text.strip())
+
+            if not pages:
+                raise ValueError(f"File '{filename}' contains no extractable text")
+
+            return "\n\n".join(pages)
+        except ValueError:
+            raise
+        except Exception as e:
+            raise ValueError(f"Failed to parse PDF '{filename}': {e}") from e
+
+
+class DocxLoader(DocumentLoader):
+    """Loader for DOCX files (.docx) using python-docx."""
+
+    SUPPORTED_EXTENSIONS = ["docx"]
+
+    def load(self, content: bytes, filename: str) -> str:
+        try:
+            from io import BytesIO
+
+            from docx import Document as DocxDocument
+
+            doc = DocxDocument(BytesIO(content))
+            paragraphs = [p.text for p in doc.paragraphs if p.text.strip()]
+
+            if not paragraphs:
+                raise ValueError(f"File '{filename}' contains no text content")
+
+            return "\n\n".join(paragraphs)
+        except ValueError:
+            raise
+        except Exception as e:
+            raise ValueError(f"Failed to parse DOCX '{filename}': {e}") from e
+
+
 def get_loader_for_extension(extension: str) -> DocumentLoader | None:
     """Get appropriate loader for file extension.
 
@@ -108,6 +160,10 @@ def get_loader_for_extension(extension: str) -> DocumentLoader | None:
         return TextLoader()
     if extension in MarkdownLoader.SUPPORTED_EXTENSIONS:
         return MarkdownLoader()
+    if extension in PDFLoader.SUPPORTED_EXTENSIONS:
+        return PDFLoader()
+    if extension in DocxLoader.SUPPORTED_EXTENSIONS:
+        return DocxLoader()
 
     return None
 

@@ -482,7 +482,7 @@ class ChatService:
             metadata={
                 "trace_id": result.trace_id,
                 "query": content,
-                "top_k": agent.retriever.top_k,
+                "top_k": agent.pipeline.top_k,
                 "citations_count": len(result.citations),
                 "used_fallback": result.used_fallback,
             },

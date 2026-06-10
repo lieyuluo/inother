@@ -31,14 +31,15 @@ DBSession = Annotated[AsyncSession, Depends(get_db_session)]
     description="Upload a .txt or .md document for processing and ingestion.",
 )
 async def upload_document(
-    file: Annotated[UploadFile, File(description="Document file (.txt or .md)")],
+    file: Annotated[UploadFile, File(description="Document file (.txt, .md, .pdf, .docx)")],
     session: DBSession,
     title: Annotated[str | None, Form()] = None,
+    visibility: Annotated[str, Form()] = "private",
     current_user: User = Depends(get_request_user),
 ) -> UploadResponse:
     """Upload and process a document.
 
-    Supported file types: .txt, .md
+    Supported file types: .txt, .md, .pdf, .docx
 
     The document will be:
     1. Validated for file type
@@ -61,6 +62,7 @@ async def upload_document(
             content=content,
             title=title,
             user=current_user,
+            visibility=visibility,
         )
         return result
     except ValueError as e:

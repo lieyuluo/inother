@@ -24,3 +24,4 @@ class RAGAgentResult:
     citations: list[Citation] = field(default_factory=list)
     trace_id: str = field(default_factory=lambda: str(uuid4()))
     used_fallback: bool = False
+    trace: dict[str, object] | None = None

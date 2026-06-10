@@ -1,10 +1,10 @@
 # Enterprise AI Agent
 
-企业级 AI Agent 后端服务 - 一个生产就绪的 FastAPI + React 应用。当前版本 v1.0。
+企业级 AI Agent 后端服务 - 一个生产就绪的 FastAPI + React 应用。当前版本 v1.0 Phase 4。
 
 ## 项目介绍
 
-Enterprise AI Agent 是一个企业级 AI Agent 应用，提供 AI 对话、文档管理、RAG（检索增强生成）、工具调用、ReAct Agent、Plan-and-Execute Agent 和 MCP 集成功能。v1.0 Phase 1 新增了 Real Provider + SSE Streaming Chat。
+Enterprise AI Agent 是一个企业级 AI Agent 应用，提供 AI 对话、文档管理、RAG（检索增强生成）、工具调用、ReAct Agent、Plan-and-Execute Agent 和 MCP 集成功能。v1.0 Phase 4 新增了 PDF/DOCX 文档支持、文档权限与可见性、检索管线（向量/关键词/混合）、递归分块策略等。
 
 ## v1.0 功能清单
 
@@ -40,6 +40,16 @@ Enterprise AI Agent 是一个企业级 AI Agent 应用，提供 AI 对话、文�
 - **SSE 支持 rag / react / plan_execute 模式**
 - **SSE 支持 /tool 命令流式输出**
 - **前端 ChatWindow 流式开关和流式显示**
+- **PDF/DOCX 文档支持（pypdf + python-docx）**
+- **文档可见性（private/public）**
+- **文档权限过滤（按可见性过滤检索和列表）**
+- **递归分块策略（recursive splitting）**
+- **检索管线（vector/keyword/hybrid）**
+- **RRF 混合融合检索**
+- **Reranker 架构占位**
+- **RAG trace metadata（检索模式、分块策略等元数据）**
+- **Admin Documents 端点（GET /api/admin/documents）**
+- **增强版文档 UI（可见性、文件类型、chunk 数量显示）**
 - 基础 Web UI
 - Docker Compose 一键部署
 
@@ -141,6 +151,53 @@ calculator_tool 使用 AST 白名单解析，确保安全：
 - action: `tool.invoke`
 - resource_type: `tool`
 - metadata 包含：trace_id、tool_name、input_summary、status、latency_ms、error（如有）
+
+## 文档格式支持
+
+v1.0 Phase 4 新增多格式文档解析支持。
+
+### 支持的格式
+
+| 格式 | 扩展名 | 解析库 |
+|------|--------|--------|
+| 纯文本 | `.txt` | 内置文本读取 |
+| Markdown | `.md` | 内置文本读取 |
+| PDF | `.pdf` | pypdf |
+| Word | `.docx` | python-docx |
+
+### 解析说明
+
+- **PDF 解析**：使用 `pypdf` 提取文本内容，支持文本型 PDF
+- **DOCX 解析**：使用 `python-docx` 提取段落文本
+- **限制**：扫描型 PDF（图片扫描件）可能无法提取文本，需要 OCR 支持（当前未实现）
+
+## 文档权限与可见性
+
+v1.0 Phase 4 新增文档可见性控制，支持 private 和 public 两种可见性级别。
+
+### 可见性级别
+
+| 可见性 | 说明 |
+|--------|------|
+| `private` | 仅文档所有者可以查看、搜索和删除 |
+| `public` | 所有已认证用户可以查看和搜索，仅所有者和管理员可以删除 |
+
+### 上传时指定可见性
+
+上传文档时可通过 `visibility` 参数指定可见性，默认为 `private`：
+
+```bash
+curl -X POST http://localhost:8000/api/documents/upload \
+  -H "Authorization: Bearer <token>" \
+  -F "file=@document.pdf" \
+  -F "visibility=public"
+```
+
+### RAG 和搜索工具的可见性过滤
+
+- RAG 检索仅返回当前用户可见的文档 chunks（自己的 private 文档 + 所有 public 文档）
+- `search_documents_tool` 同样遵守可见性过滤规则
+- `list_documents_tool` 仅列出当前用户可见的文档
 
 ## ReAct Agent 说明
 
@@ -541,6 +598,9 @@ enterprise-ai-agent/
 | `EMBEDDING_DIMENSION` | Embedding 维度 | `1536` |
 | `RAG_TOP_K` | RAG 检索返回的最大结果数 | `4` |
 | `RAG_SNIPPET_MAX_LENGTH` | Citation snippet 最大长度 | `300` |
+| `RAG_CHUNK_STRATEGY` | 分块策略（fixed/recursive） | `fixed` |
+| `RAG_RETRIEVAL_MODE` | 检索模式（vector/keyword/hybrid） | `vector` |
+| `RAG_RERANKER_PROVIDER` | Reranker 提供者（none 为占位） | `none` |
 | `VITE_API_BASE_URL` | 前端 API 地址 | `http://localhost:8000` |
 
 ### Provider 配置说明
@@ -576,9 +636,43 @@ Retriever 根据数据库类型自动选择检索路径：
 
 数据库差异封装在 Retriever 内部，route/service/agent 层不感知数据库类型。
 
-## GitHub Codespaces 使用说明
+## 检索模式
 
-**本项目推荐使用 GitHub Codespaces 进行开发和验证。**
+v1.0 Phase 4 新增多种检索模式，通过 `RAG_RETRIEVAL_MODE` 环境变量配置。
+
+### 模式说明
+
+| 模式 | 说明 |
+|------|------|
+| `vector` | 基于 Embedding 相似度的向量检索（默认） |
+| `keyword` | 基于 SQL LIKE 的关键词匹配检索 |
+| `hybrid` | RRF（Reciprocal Rank Fusion）融合 vector + keyword 结果 |
+
+### Hybrid 模式说明
+
+- Hybrid 模式使用 RRF 算法将向量检索和关键词检索的结果融合
+- RRF 公式：`score = Σ 1/(k + rank_i)`，其中 k 为常数（默认 60）
+- **注意**：当前 hybrid 实现是轻量级方案，不是生产级 Elasticsearch 级别的混合检索
+
+## 分块策略
+
+v1.0 Phase 4 新增递归分块策略，通过 `RAG_CHUNK_STRATEGY` 环境变量配置。
+
+### 策略说明
+
+| 策略 | 说明 |
+|------|------|
+| `fixed` | 基于字符数的固定切分，带重叠（默认） |
+| `recursive` | 基于段落/行分隔的递归切分，无法按段落切分时回退到 fixed 策略 |
+
+### Recursive 策略说明
+
+- 优先按段落（`\n\n`）分割文本
+- 段落过长时按行（`\n`）分割
+- 行过长时回退到 fixed 字符切分
+- 保留语义完整性优于固定长度切分
+
+## GitHub Codespaces 使用说明
 
 ### 创建 Codespace
 
@@ -796,6 +890,13 @@ button is disabled and an admin-role warning is shown.
 | GET | `/api/documents/{document_id}/chunks` | 获取文档 chunks |
 | DELETE | `/api/documents/{document_id}` | 删除文档 |
 
+### Admin API
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/api/admin/documents` | 管理员查看所有文档（需 admin 角色） |
+| GET | `/api/admin/audit-logs` | 管理员查看审计日志（需 admin 角色） |
+
 ### Tool API
 
 | 方法 | 路径 | 说明 |
@@ -808,8 +909,8 @@ button is disabled and an admin-role warning is shown.
 1. 打开前端页面（http://localhost:5173 或 Codespaces 转发 URL）
 2. 页面顶部显示 API 健康状态
 3. 左侧边栏：
-   - **Upload Document**：上传 .txt 或 .md 文件
-   - **Documents**：查看已上传文档列表，支持删除
+   - **Upload Document**：上传 .txt、.md、.pdf、.docx 文件，支持设置可见性（private/public）
+   - **Documents**：查看已上传文档列表，显示可见性、文件类型、chunk 数量，支持删除
    - **Tool Panel**：选择并调用工具，查看结果
    - **Sessions**：创建或选择聊天会话
 4. 右侧聊天区域：
@@ -866,6 +967,17 @@ docker compose up -d --build
 35. 选择 Plan-Exec 模式 + 流式，输入：`请先查看系统状态，再搜索文档并总结`，确认流式输出包含 plan 和 step_results 事件
 36. 流式模式下输入 `/tool echo_tool {"text":"hello"}`，确认流式输出工具结果
 37. 关闭流式开关，确认回退到非流式模式
+38. 上传 PDF 文档，确认上传成功且文档列表显示文件类型为 .pdf
+39. 上传 DOCX 文档，确认上传成功且文档列表显示文件类型为 .docx
+40. 上传文档时指定 visibility=public，确认文档列表显示可见性标记
+41. 上传文档时默认 visibility=private，确认仅自己可见
+42. 使用其他用户账号登录，确认可以看到 public 文档但看不到 private 文档
+43. 设置 `RAG_RETRIEVAL_MODE=keyword`，重启服务，确认关键词检索返回结果
+44. 设置 `RAG_RETRIEVAL_MODE=hybrid`，重启服务，确认混合检索返回结果
+45. 设置 `RAG_CHUNK_STRATEGY=recursive`，重启服务，上传文档确认分块正常
+46. 确认 RAG 回复中包含 trace metadata（检索模式、分块策略等信息）
+47. 使用管理员账号访问 `GET /api/admin/documents`，确认返回所有文档列表
+48. 确认文档列表 UI 显示可见性、文件类型、chunk 数量
 
 ## v1.0 已知限制
 
@@ -878,7 +990,11 @@ docker compose up -d --build
 - **ReAct 是确定性规划器**：不是生产级 LLM planner，基于规则匹配
 - **Plan-and-Execute 是确定性规划器**：不是生产级 LLM planner，基于规则匹配
 - **MCP 是 demo 集成**：in-process demo server，非标准 MCP transport
-- **仅支持 .txt/.md**：不支持 PDF、DOCX 等文档格式
+- **Hybrid 检索是轻量级实现**：不是生产级 Elasticsearch 级别的混合检索
+- **Reranker 是占位架构**：当前 `RAG_RERANKER_PROVIDER=none`，未接入真实 Reranker
+- **无复杂 ACL**：文档权限仅支持 private/public 两级，无细粒度访问控制
+- **无团队/组织权限模型**：不支持团队或组织级别的文档共享和权限管理
+- **扫描型 PDF 不支持**：图片扫描件无法提取文本，需要 OCR
 
 ## v1.0+ 后续方向
 
@@ -886,14 +1002,22 @@ docker compose up -d --build
 - ~~接入真实 LLM（如 OpenAI API）~~ ✅ OpenAI-compatible Provider 已实现
 - ~~实现 SSE 流式输出~~ ✅ SSE Streaming Chat API 已实现
 
+**v1.0 Phase 4 已完成：**
+- ~~支持 PDF、DOCX 文档格式~~ ✅ pypdf + python-docx 已实现
+- ~~文档可见性控制~~ ✅ private/public 可见性已实现
+- ~~检索管线~~ ✅ vector/keyword/hybrid 检索模式已实现
+- ~~递归分块策略~~ ✅ recursive splitting 已实现
+
 **待实现：**
 1. 实现 LLM 驱动的 ReAct planner（替换确定性规划器）
 2. 实现 LLM 驱动的 Plan-and-Execute planner
 3. 实现标准 MCP transport（stdio/HTTP）
 4. 实现用户认证和授权（RBAC）
-5. 支持 PDF、DOCX 文档格式
+5. 接入真实 Reranker（替换占位架构）
 6. 实现多租户
 7. 实现 Admin Dashboard
+8. 实现团队/组织权限模型
+9. 支持 OCR 扫描型 PDF
 
 ## 许可证
 

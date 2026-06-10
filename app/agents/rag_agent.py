@@ -9,7 +9,7 @@ from app.core.config import get_settings
 from app.llm.base import BaseLLMProvider
 from app.llm.provider import get_llm_provider
 from app.rag.embeddings import EmbeddingProvider, get_embedding_provider
-from app.rag.retriever import Retriever
+from app.rag.retrieval_pipeline import RetrievalPipeline
 
 
 class RAGAgent:
@@ -17,10 +17,10 @@ class RAGAgent:
 
     Flow:
     1. Accept user question
-    2. Use Retriever to find relevant document chunks
+    2. Use RetrievalPipeline to find relevant document chunks
     3. Build context from retrieved chunks
     4. Use LLM Provider to generate answer
-    5. Return answer with citations
+    5. Return answer with citations and trace metadata
     """
 
     def __init__(
@@ -49,7 +49,7 @@ class RAGAgent:
             model=settings.openai_embedding_model,
         )
         self.llm_provider = llm_provider or get_llm_provider(settings)
-        self.retriever = Retriever(
+        self.pipeline = RetrievalPipeline(
             session=session,
             embedding_provider=self.embedding_provider,
             top_k=top_k,
@@ -66,8 +66,8 @@ class RAGAgent:
         Returns:
             RAGAgentResult containing answer, citations, and metadata.
         """
-        # Retrieve relevant chunks
-        retrieval_results = await self.retriever.similarity_search(question)
+        # Retrieve relevant chunks using pipeline
+        retrieval_results, trace = await self.pipeline.retrieve(question)
 
         # Build citations from retrieval results
         citations = [
@@ -98,4 +98,13 @@ class RAGAgent:
             answer=answer,
             citations=citations,
             used_fallback=used_fallback,
+            trace={
+                "retrieval_mode": trace.retrieval_mode,
+                "vector_results_count": trace.vector_results_count,
+                "keyword_results_count": trace.keyword_results_count,
+                "final_results_count": trace.final_results_count,
+                "reranker_provider": trace.reranker_provider,
+                "filters": trace.filters,
+                "elapsed_ms": trace.elapsed_ms,
+            },
         )

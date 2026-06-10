@@ -130,11 +130,18 @@ class Document(Base, UUIDMixin, TimestampMixin):
         json_type,
         nullable=True,
     )
+    visibility: Mapped[str] = mapped_column(
+        String(20), default="private", nullable=False, index=True
+    )
 
     # Relationships
     user: Mapped["User"] = relationship("User", back_populates="documents")
     chunks: Mapped[list["DocumentChunk"]] = relationship(
         "DocumentChunk", back_populates="document", cascade="all, delete-orphan"
+    )
+
+    __table_args__ = (
+        CheckConstraint("visibility IN ('private', 'public')", name="ck_documents_visibility"),
     )
 
 

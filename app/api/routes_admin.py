@@ -5,9 +5,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import require_admin
 from app.db.models import User
-from app.db.repositories import AuditLogRepository
+from app.db.repositories import AuditLogRepository, DocumentRepository
 from app.db.session import get_db_session
 from app.schemas.admin import AuditLogListResponse, AuditLogResponse
+from app.schemas.document import DocumentListResponse, DocumentResponse
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 
@@ -35,4 +36,38 @@ async def list_audit_logs(
             for log in logs
         ],
         total=len(logs),
+    )
+
+
+@router.get("/documents", response_model=DocumentListResponse)
+async def list_all_documents(
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+    admin: User = Depends(require_admin),
+    session: AsyncSession = Depends(get_db_session),
+) -> DocumentListResponse:
+    """List all documents (admin only)."""
+    doc_repo = DocumentRepository(session)
+    documents = await doc_repo.get_all(limit=limit, offset=offset)
+    total = await doc_repo.count_all()
+
+    return DocumentListResponse(
+        documents=[
+            DocumentResponse(
+                id=d.id,
+                title=d.title,
+                filename=d.filename,
+                file_type=d.file_type,
+                file_size=d.file_size,
+                status=d.status,
+                visibility=d.visibility,
+                chunk_count=(d.meta or {}).get("chunk_count"),
+                user_id=d.user_id,
+                parser_name=(d.meta or {}).get("parser_name"),
+                created_at=d.created_at,
+                updated_at=d.updated_at,
+            )
+            for d in documents
+        ],
+        total=total,
     )

@@ -19,7 +19,7 @@ class Settings(BaseSettings):
     # Application
     app_name: str = "enterprise-ai-agent"
     app_env: str = "development"
-    app_version: str = "0.2.0"
+    app_version: str = "1.0.0"
 
     # Database
     database_url: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/enterprise_ai_agent"
@@ -59,6 +59,11 @@ class Settings(BaseSettings):
     embedding_dimension: int = 1536  # Match OpenAI embedding dimension
     rag_top_k: int = 4
     rag_snippet_max_length: int = 300
+
+    # RAG Advanced Configuration
+    rag_chunk_strategy: str = "fixed"  # 'fixed' or 'recursive'
+    rag_retrieval_mode: str = "vector"  # 'vector', 'keyword', or 'hybrid'
+    rag_reranker_provider: str = "none"  # 'none' (placeholder for future)
 
     # MCP Configuration
     mcp_demo_enabled: bool = True  # Enable demo MCP tools

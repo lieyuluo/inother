@@ -85,9 +85,10 @@ export const api = {
     return request('/api/documents')
   },
 
-  async uploadDocument(file: File): Promise<unknown> {
+  async uploadDocument(file: File, visibility: string = 'private'): Promise<unknown> {
     const formData = new FormData()
     formData.append('file', file)
+    formData.append('visibility', visibility)
     return request('/api/documents/upload', { method: 'POST', body: formData })
   },
 
