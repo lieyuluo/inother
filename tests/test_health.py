@@ -2,6 +2,8 @@
 
 from fastapi.testclient import TestClient
 
+from app.core.config import get_settings
+
 
 class TestHealthEndpoints:
     """Test class for health check endpoints."""
@@ -27,7 +29,7 @@ class TestHealthEndpoints:
         """Test that GET /health returns version."""
         response = client.get("/health")
         data = response.json()
-        assert data["version"] == "0.2.0"
+        assert data["version"] == get_settings().app_version
 
     def test_health_ready_returns_200(self, client: TestClient) -> None:
         """Test that GET /health/ready returns 200 status code."""
@@ -71,4 +73,4 @@ class TestAppLoadable:
         """Test that the app has the correct version."""
         from app.main import app
 
-        assert app.version == "0.2.0"
+        assert app.version == get_settings().app_version
