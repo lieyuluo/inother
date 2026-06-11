@@ -4,7 +4,6 @@ import { AuthPanel } from './components/AuthPanel'
 import { AdminDashboard } from './components/AdminDashboard'
 import { ChatSessionList } from './components/ChatSessionList'
 import { ChatWindow } from './components/ChatWindow'
-import { CitationList } from './components/CitationList'
 import { DocumentList } from './components/DocumentList'
 import { DocumentUpload } from './components/DocumentUpload'
 import { HealthStatus } from './components/HealthStatus'
@@ -16,7 +15,6 @@ export default function App() {
   const [documents, setDocuments] = useState<Document[]>([])
   const [sessions, setSessions] = useState<Session[]>([])
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null)
-  const [messages, setMessages] = useState<SendMessageResponse | null>(null)
   const [messageList, setMessageList] = useState<Message[]>([])
   const [error, setError] = useState('')
   const [creating, setCreating] = useState(false)
@@ -63,7 +61,6 @@ export default function App() {
     setCurrentUser(user)
     setSelectedSessionId(null)
     setMessageList([])
-    setMessages(null)
     loadDocuments()
     loadSessions()
   }
@@ -73,14 +70,12 @@ export default function App() {
     setCurrentUser(null)
     setSelectedSessionId(null)
     setMessageList([])
-    setMessages(null)
     loadDocuments()
     loadSessions()
   }
 
   const handleSelectSession = (id: string) => {
     setSelectedSessionId(id)
-    setMessages(null)
     loadMessages(id)
   }
 
@@ -91,7 +86,6 @@ export default function App() {
       setSessions((prev: Session[]) => [session, ...prev])
       setSelectedSessionId(session.id)
       setMessageList([])
-      setMessages(null)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to create session')
     } finally {
@@ -100,7 +94,6 @@ export default function App() {
   }
 
   const handleMessageSent = (response: SendMessageResponse) => {
-    setMessages(response)
     setMessageList((prev) => [
       ...prev,
       response.user_message,
@@ -191,10 +184,6 @@ export default function App() {
               <p>Select or create a session to start chatting.</p>
               <p className="hint">Use /tool &lt;name&gt; &lt;json&gt; in chat to invoke tools.</p>
             </div>
-          )}
-
-          {messages && messages.citations.length > 0 && (
-            <CitationList citations={messages.citations} traceId={messages.trace_id} />
           )}
         </section>
       </main>
