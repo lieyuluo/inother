@@ -13,8 +13,8 @@ export function ChatSessionList({ sessions, selectedId, onSelect, onCreate, crea
     <div className="session-list">
       <div className="session-header">
         <h3>Sessions</h3>
-        <button onClick={onCreate} disabled={creating}>
-          {creating ? '...' : '+ New'}
+        <button className="btn-quiet" onClick={onCreate} disabled={creating}>
+          {creating ? 'Creating...' : 'New'}
         </button>
       </div>
       {sessions.length === 0 && (
@@ -26,6 +26,14 @@ export function ChatSessionList({ sessions, selectedId, onSelect, onCreate, crea
             key={s.id}
             className={s.id === selectedId ? 'session-item active' : 'session-item'}
             onClick={() => onSelect(s.id)}
+            role="button"
+            tabIndex={0}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault()
+                onSelect(s.id)
+              }
+            }}
           >
             <span className="session-title">{s.title || 'Untitled'}</span>
           </li>

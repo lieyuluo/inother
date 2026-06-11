@@ -43,9 +43,9 @@ export function AuthPanel({ user, onAuthenticated, onLogout, onError }: AuthPane
       <div className="auth-panel auth-panel-signed-in">
         <div className="auth-user">
           <span className="auth-name">{user.username}</span>
-          <span className="auth-meta">{user.email} · {user.role}</span>
+          <span className="auth-meta">{user.email} | {user.role}</span>
         </div>
-        <button onClick={onLogout}>Logout</button>
+        <button className="btn-quiet" onClick={onLogout}>Logout</button>
       </div>
     )
   }

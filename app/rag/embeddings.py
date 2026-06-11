@@ -36,6 +36,10 @@ class EmbeddingProvider(Protocol):
         """
         ...
 
+    async def async_embed(self, text: str) -> list[float]:
+        """Generate embedding for text from async request handlers."""
+        ...
+
     def get_dimension(self) -> int:
         """Get embedding dimension.
 
@@ -58,6 +62,11 @@ class BaseEmbeddingProvider(ABC):
         Returns:
             Embedding vector as list of floats
         """
+        pass
+
+    @abstractmethod
+    async def async_embed(self, text: str) -> list[float]:
+        """Generate embedding for text from async request handlers."""
         pass
 
     @abstractmethod
@@ -129,6 +138,10 @@ class FakeEmbeddingProvider(BaseEmbeddingProvider):
 
         return embedding
 
+    async def async_embed(self, text: str) -> list[float]:
+        """Generate deterministic embedding from async request handlers."""
+        return self.embed(text)
+
     def get_dimension(self) -> int:
         """Get embedding dimension.
 
@@ -187,23 +200,11 @@ class OpenAIEmbeddingProvider(BaseEmbeddingProvider):
         self._max_retries = max_retries
         self._client = client
 
-    def _get_client(self) -> httpx.AsyncClient:
-        """Get or create the HTTP client."""
-        if self._client is None:
-            self._client = httpx.AsyncClient(
-                timeout=self._timeout,
-                headers={
-                    "Authorization": f"Bearer {self._api_key}",
-                    "Content-Type": "application/json",
-                },
-            )
-        return self._client
-
     def embed(self, text: str) -> list[float]:
         """Generate embedding using OpenAI API (synchronous wrapper).
 
         Note: This is a sync wrapper around the async implementation.
-        For production use, prefer calling _async_embed directly.
+        For production request handlers, prefer calling async_embed directly.
 
         Args:
             text: Input text.
@@ -227,10 +228,14 @@ class OpenAIEmbeddingProvider(BaseEmbeddingProvider):
             import concurrent.futures
 
             with concurrent.futures.ThreadPoolExecutor() as pool:
-                future = pool.submit(asyncio.run, self._async_embed(text))
+                future = pool.submit(asyncio.run, self.async_embed(text))
                 return future.result()
         else:
-            return asyncio.run(self._async_embed(text))
+            return asyncio.run(self.async_embed(text))
+
+    async def async_embed(self, text: str) -> list[float]:
+        """Generate embedding using OpenAI API from async request handlers."""
+        return await self._async_embed(text)
 
     async def _async_embed(self, text: str) -> list[float]:
         """Generate embedding using OpenAI API (async).
@@ -256,8 +261,7 @@ class OpenAIEmbeddingProvider(BaseEmbeddingProvider):
 
         for attempt in range(self._max_retries + 1):
             try:
-                client = self._get_client()
-                response = await client.post(url, json=payload)
+                response = await self._post_json(url, payload)
 
                 if response.status_code >= 500:
                     last_error = ProviderResponseError(
@@ -326,6 +330,25 @@ class OpenAIEmbeddingProvider(BaseEmbeddingProvider):
             Expected dimension for embeddings.
         """
         return self._dimension
+
+    async def _post_json(self, url: str, payload: dict[str, Any]) -> httpx.Response:
+        """POST JSON using an injected client or a request-scoped client.
+
+        The default client is intentionally request-scoped so sync wrappers that
+        spin temporary event loops never reuse an AsyncClient bound to a closed
+        loop.
+        """
+        if self._client is not None:
+            return await self._client.post(url, json=payload)
+
+        async with httpx.AsyncClient(
+            timeout=self._timeout,
+            headers={
+                "Authorization": f"Bearer {self._api_key}",
+                "Content-Type": "application/json",
+            },
+        ) as client:
+            return await client.post(url, json=payload)
 
 
 def get_embedding_provider(

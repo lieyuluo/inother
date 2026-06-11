@@ -15,6 +15,20 @@ import type {
 const API_BASE = import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_URL || ''
 const TOKEN_KEY = 'enterprise_ai_agent_token'
 
+export class ApiError extends Error {
+  status: number
+  code?: string
+  details?: unknown
+
+  constructor(message: string, status: number, code?: string, details?: unknown) {
+    super(message)
+    this.name = 'ApiError'
+    this.status = status
+    this.code = code
+    this.details = details
+  }
+}
+
 function getToken(): string | null {
   return localStorage.getItem(TOKEN_KEY)
 }
@@ -36,16 +50,7 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
 
   const res = await fetch(`${API_BASE}${path}`, { ...init, headers })
   if (!res.ok) {
-    let detail = `HTTP ${res.status}`
-    try {
-      const body = await res.json()
-      if (typeof body.detail === 'string') {
-        detail = body.detail
-      }
-    } catch {
-      // keep status text fallback
-    }
-    throw new Error(detail)
+    throw await buildApiError(res)
   }
 
   if (res.status === 204) {
@@ -158,7 +163,7 @@ export const api = {
       })
 
       if (!res.ok) {
-        onError(`HTTP ${res.status}`)
+        onError((await buildApiError(res)).message)
         return
       }
 
@@ -253,4 +258,86 @@ export const api = {
     const params = action ? `?action=${encodeURIComponent(action)}` : ''
     return request(`/api/admin/audit-logs${params}`)
   },
+}
+
+async function buildApiError(res: Response): Promise<ApiError> {
+  let body: unknown
+  try {
+    body = await res.json()
+  } catch {
+    body = null
+  }
+
+  const message = getErrorMessage(body, res.status)
+  const code = getStringField(body, 'code')
+  const details = getObjectField(body, 'details')
+  return new ApiError(message, res.status, code, details)
+}
+
+function getErrorMessage(body: unknown, status: number): string {
+  if (isRecord(body)) {
+    const message = getStringField(body, 'message')
+    if (message) return message
+
+    const error = getStringField(body, 'error')
+    if (error) return error
+
+    const detail = body.detail
+    if (typeof detail === 'string') return detail
+    if (Array.isArray(detail)) {
+      const readable = formatValidationDetails(detail)
+      if (readable) return readable
+    }
+  }
+
+  switch (status) {
+    case 400:
+      return '请求参数不正确，请检查后重试。'
+    case 401:
+      return '请先登录或重新登录后再试。'
+    case 403:
+      return '当前账号没有权限执行此操作。'
+    case 404:
+      return '请求的资源不存在或你无权访问。'
+    case 409:
+      return '数据已存在，请换一个值后重试。'
+    case 422:
+      return '请求参数没有通过校验，请检查输入内容。'
+    case 500:
+      return '服务器内部错误，请稍后重试。'
+    case 502:
+      return 'AI 服务返回异常，请检查模型、额度或稍后重试。'
+    case 504:
+      return 'AI 服务响应超时，请稍后重试。'
+    default:
+      return `请求失败：HTTP ${status}`
+  }
+}
+
+function formatValidationDetails(detail: unknown[]): string {
+  const messages = detail
+    .map((item) => {
+      if (!isRecord(item)) return ''
+      const loc = Array.isArray(item.loc) ? item.loc.map(String) : []
+      const field = loc.filter((part) => !['body', 'query', 'path'].includes(part)).join('.')
+      const msg = typeof item.msg === 'string' ? item.msg : ''
+      return field && msg ? `${field}: ${msg}` : msg
+    })
+    .filter(Boolean)
+  return messages.length > 0 ? `请求参数不正确：${messages.join('; ')}` : ''
+}
+
+function getStringField(value: unknown, key: string): string | undefined {
+  if (!isRecord(value)) return undefined
+  const field = value[key]
+  return typeof field === 'string' && field ? field : undefined
+}
+
+function getObjectField(value: unknown, key: string): unknown {
+  if (!isRecord(value)) return undefined
+  return value[key]
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null
 }

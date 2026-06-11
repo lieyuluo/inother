@@ -71,10 +71,10 @@ export function ToolPanel({ onError, currentUser }: ToolPanelProps) {
           {selectedToolInfo.description}
           <span className="tool-role">
             Source: {selectedToolInfo.source}
-            {selectedToolInfo.server_name ? ` · Server: ${selectedToolInfo.server_name}` : ''}
-            {' · '}Role: {selectedToolInfo.required_role}
+            {selectedToolInfo.server_name ? ` | Server: ${selectedToolInfo.server_name}` : ''}
+            {' | '}Role: {selectedToolInfo.required_role}
             {selectedToolInfo.namespaced_tool_name && selectedToolInfo.namespaced_tool_name !== selectedToolInfo.name
-              ? ` · Canonical: ${selectedToolInfo.namespaced_tool_name}`
+              ? ` | Canonical: ${selectedToolInfo.namespaced_tool_name}`
               : ''}
           </span>
           {!selectedToolInfo.enabled && <span className="tool-role tool-warning">Disabled</span>}
@@ -89,7 +89,7 @@ export function ToolPanel({ onError, currentUser }: ToolPanelProps) {
           rows={2}
         />
       </div>
-      <button onClick={handleInvoke} disabled={loading || !selectedTool || insufficientRole}>
+      <button className="btn-primary" onClick={handleInvoke} disabled={loading || !selectedTool || insufficientRole}>
         {loading ? 'Running...' : 'Invoke'}
       </button>
       {result && (

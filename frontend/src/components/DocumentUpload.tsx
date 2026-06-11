@@ -37,17 +37,24 @@ export function DocumentUpload({ onUploaded, onError }: Props) {
     <div className="document-upload">
       <h3>Upload Document</h3>
       <div className="upload-row">
-        <input type="file" ref={fileRef} accept=".txt,.md,.pdf,.docx" disabled={uploading} />
+        <input
+          type="file"
+          ref={fileRef}
+          accept=".txt,.md,.pdf,.docx"
+          disabled={uploading}
+          aria-label="Document file"
+        />
         <select
           className="visibility-select"
           value={visibility}
           onChange={(e) => setVisibility(e.target.value)}
           disabled={uploading}
+          aria-label="Document visibility"
         >
           <option value="private">Private</option>
           <option value="public">Public</option>
         </select>
-        <button onClick={handleUpload} disabled={uploading}>
+        <button className="btn-primary" onClick={handleUpload} disabled={uploading}>
           {uploading ? 'Uploading...' : 'Upload'}
         </button>
       </div>

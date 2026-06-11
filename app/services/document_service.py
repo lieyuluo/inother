@@ -114,7 +114,7 @@ class DocumentService:
             # Create chunks with embeddings
             chunks_data = []
             for i, chunk_text in enumerate(chunks):
-                embedding = self.embedding_provider.embed(chunk_text)
+                embedding = await self.embedding_provider.async_embed(chunk_text)
                 token_count = self.chunker.estimate_token_count(chunk_text)
                 chunks_data.append(
                     {

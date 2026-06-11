@@ -138,7 +138,10 @@ export function ChatWindow({ sessionId, messages, onMessageSent, onError }: Prop
     <div className="chat-window">
       <div className="chat-messages">
         {messages.length === 0 && (
-          <p className="empty-text">No messages yet. Ask a question!</p>
+          <div className="empty-state">
+            <h3>No messages yet</h3>
+            <p>Ask a question against your knowledge base to start this session.</p>
+          </div>
         )}
         {messages.map((msg) => (
           <div key={msg.id} className={`message message-${msg.role}`}>
@@ -174,23 +177,26 @@ export function ChatWindow({ sessionId, messages, onMessageSent, onError }: Prop
 
       <div className="chat-input">
         <div className="chat-input-row">
-          <select
-            value={mode}
-            onChange={(e) => setMode(e.target.value)}
-            className="mode-select"
-          >
-            <option value="rag">RAG</option>
-            <option value="react">ReAct</option>
-            <option value="plan_execute">Plan-Exec</option>
-          </select>
-          <label className="stream-toggle">
-            <input
-              type="checkbox"
-              checked={streaming}
-              onChange={(e) => setStreaming(e.target.checked)}
-            />
-            Stream
-          </label>
+          <div className="composer-controls">
+            <select
+              value={mode}
+              onChange={(e) => setMode(e.target.value)}
+              className="mode-select"
+              aria-label="Agent mode"
+            >
+              <option value="rag">RAG</option>
+              <option value="react">ReAct</option>
+              <option value="plan_execute">Plan-Exec</option>
+            </select>
+            <label className="stream-toggle">
+              <input
+                type="checkbox"
+                checked={streaming}
+                onChange={(e) => setStreaming(e.target.checked)}
+              />
+              Stream
+            </label>
+          </div>
           <textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}
@@ -199,7 +205,7 @@ export function ChatWindow({ sessionId, messages, onMessageSent, onError }: Prop
             disabled={sending}
             rows={2}
           />
-          <button onClick={handleSend} disabled={sending || !input.trim()}>
+          <button className="btn-primary" onClick={handleSend} disabled={sending || !input.trim()}>
             {sending ? 'Sending...' : 'Send'}
           </button>
         </div>

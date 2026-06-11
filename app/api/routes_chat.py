@@ -8,6 +8,12 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.provider_errors import (
+    ProviderConfigError,
+    ProviderError,
+    ProviderResponseError,
+    ProviderTimeoutError,
+)
 from app.core.security import get_request_user
 from app.db.models import User
 from app.db.session import get_db_session
@@ -150,6 +156,9 @@ async def send_message_stream(
         except ValueError as e:
             yield _sse_event("error", {"error": str(e)})
             return
+        except ProviderError as e:
+            yield _sse_event("error", {"error": _provider_error_message(e)})
+            return
         except Exception:
             yield _sse_event("error", {"error": "Internal server error"})
             return
@@ -228,3 +237,13 @@ async def send_message_stream(
             "X-Accel-Buffering": "no",
         },
     )
+
+
+def _provider_error_message(exc: ProviderError) -> str:
+    if isinstance(exc, ProviderConfigError):
+        return "AI 服务配置错误，请联系管理员检查 API Key、模型名称或 Base URL。"
+    if isinstance(exc, ProviderTimeoutError):
+        return "AI 服务响应超时，请稍后重试。"
+    if isinstance(exc, ProviderResponseError):
+        return "AI 服务返回异常，请检查模型、额度、Base URL，或稍后重试。"
+    return "AI 服务暂时不可用，请稍后重试。"

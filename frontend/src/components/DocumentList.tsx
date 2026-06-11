@@ -43,7 +43,10 @@ export function DocumentList({ documents, onRefresh, onError }: Props) {
   if (documents.length === 0) {
     return (
       <div className="document-list">
-        <h3>Documents</h3>
+        <div className="panel-heading">
+          <h3>Documents</h3>
+          <button className="btn-quiet" onClick={onRefresh}>Refresh</button>
+        </div>
         <p className="empty-text">No documents yet. Upload a .txt, .md, .pdf, or .docx file.</p>
       </div>
     )
@@ -51,7 +54,11 @@ export function DocumentList({ documents, onRefresh, onError }: Props) {
 
   return (
     <div className="document-list">
-      <h3>Documents ({documents.length})</h3>
+      <div className="panel-heading">
+        <h3>Documents</h3>
+        <span className="panel-count">{documents.length}</span>
+        <button className="btn-quiet" onClick={onRefresh}>Refresh</button>
+      </div>
       <ul>
         {documents.map((doc) => (
           <li key={doc.id} className="document-item">
@@ -80,7 +87,7 @@ export function DocumentList({ documents, onRefresh, onError }: Props) {
               onClick={() => handleDelete(doc.id)}
               disabled={deleting === doc.id}
             >
-              {deleting === doc.id ? '...' : 'Delete'}
+              {deleting === doc.id ? 'Deleting...' : 'Delete'}
             </button>
           </li>
         ))}

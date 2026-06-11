@@ -1,0 +1,105 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-06-11T00:00:00+08:00",
+  "title": "Design System: Enterprise AI Agent",
+  "extensions": {
+    "colorMeta": {
+      "primary": {
+        "role": "primary",
+        "displayName": "Trace Blue",
+        "canonical": "#2563eb",
+        "tonalRamp": ["oklch(20% 0.08 260)", "oklch(32% 0.12 260)", "oklch(45% 0.16 260)", "oklch(56% 0.18 260)", "oklch(68% 0.14 260)", "oklch(78% 0.10 260)", "oklch(88% 0.06 260)", "oklch(96% 0.025 260)"]
+      },
+      "surface": {
+        "role": "neutral",
+        "displayName": "Panel White",
+        "canonical": "#ffffff",
+        "tonalRamp": ["#111827", "#1f2937", "#374151", "#6b7280", "#9ca3af", "#d1d5db", "#f3f4f6", "#ffffff"]
+      },
+      "success": {
+        "role": "secondary",
+        "displayName": "Evidence Green",
+        "canonical": "#16a34a",
+        "tonalRamp": ["oklch(20% 0.07 145)", "oklch(32% 0.10 145)", "oklch(44% 0.13 145)", "oklch(55% 0.15 145)", "oklch(68% 0.12 145)", "oklch(80% 0.08 145)", "oklch(90% 0.045 145)", "oklch(96% 0.025 145)"]
+      }
+    },
+    "typographyMeta": {
+      "title": {
+        "displayName": "Product Title",
+        "purpose": "App title and major workspace headings."
+      },
+      "body": {
+        "displayName": "Workspace Body",
+        "purpose": "Chat content, prose, forms, and table content."
+      },
+      "label": {
+        "displayName": "Operational Label",
+        "purpose": "Panel labels, badges, controls, and dense state text."
+      }
+    },
+    "shadows": [],
+    "motion": [
+      {
+        "name": "state-fast",
+        "value": "150ms ease-out",
+        "purpose": "Default hover, focus, active, and panel-state transitions."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "mobile-shell",
+        "value": "900px"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Default Button",
+      "kind": "button",
+      "refersTo": "button-default",
+      "description": "Compact product button for secondary actions.",
+      "html": "<button class=\"ds-btn-default\">Refresh</button>",
+      "css": ".ds-btn-default { background: var(--color-surface); color: var(--color-text); padding: 6px 12px; border: 1px solid var(--color-border); border-radius: var(--radius); font: 500 0.875rem system-ui, sans-serif; transition: background 150ms ease-out, color 150ms ease-out, border-color 150ms ease-out; } .ds-btn-default:hover { background: var(--color-primary); color: #fff; border-color: var(--color-primary); } .ds-btn-default:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }"
+    },
+    {
+      "name": "Text Field",
+      "kind": "input",
+      "refersTo": "input-default",
+      "description": "Standard field for auth, filters, and chat composition.",
+      "html": "<input class=\"ds-input\" placeholder=\"Filter by action\" />",
+      "css": ".ds-input { background: var(--color-surface); color: var(--color-text); padding: 8px 12px; border: 1px solid var(--color-border); border-radius: var(--radius); font: 0.875rem system-ui, sans-serif; } .ds-input:focus-visible { outline: 2px solid color-mix(in srgb, var(--color-primary) 30%, transparent); border-color: var(--color-primary); }"
+    },
+    {
+      "name": "Status Chip",
+      "kind": "chip",
+      "refersTo": "chip-status",
+      "description": "Small tonal state label for status, role, visibility, and execution outcome.",
+      "html": "<span class=\"ds-chip-success\">ready</span>",
+      "css": ".ds-chip-success { display: inline-flex; align-items: center; padding: 1px 6px; border-radius: 4px; background: #dcfce7; color: #166534; font: 600 0.75rem system-ui, sans-serif; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Evidence Desk",
+    "overview": "Enterprise AI Agent is a dense product workspace for users who need grounded answers, not a theatrical chatbot. The visual system should make document context, citations, tool execution, and admin state feel inspectable and trustworthy.",
+    "keyCharacteristics": ["Compact, operational, and source-aware.", "Clear distinction between document work, session context, chat, citations, and admin state.", "Blue accent reserved for primary action, active selection, focus, and trusted traceability.", "State colors used for meaning only: success, error, warning, processing, role, visibility."],
+    "rules": [
+      {
+        "name": "The Evidence Color Rule",
+        "body": "Blue is not decoration. It marks action, selection, focus, citation confidence, or traceable state.",
+        "section": "colors"
+      },
+      {
+        "name": "The Data First Rule",
+        "body": "Typography should clarify density, not perform personality. Reserve weight and size changes for hierarchy that affects task speed.",
+        "section": "typography"
+      },
+      {
+        "name": "The Flat Confidence Rule",
+        "body": "Surfaces are flat at rest. Use shadows only for overlays or transient affordances, never as decoration on every card.",
+        "section": "elevation"
+      }
+    ],
+    "dos": ["Do make evidence visible: citations, trace IDs, tool results, and agent steps should remain easy to scan.", "Do use compact density for enterprise workflows, with enough contrast and spacing to prevent gray noise.", "Do standardize buttons, selects, tabs, chips, tables, and focus states across user and admin surfaces.", "Do keep motion short and state-driven, with reduced-motion alternatives."],
+    "donts": ["Don't create a toy-like AI chat interface.", "Don't drift into ordinary SaaS-template gloss.", "Don't let the UI become gray, flat, and lifeless.", "Don't use terminal-heavy hacker aesthetics.", "Don't hide source traceability behind decorative chat bubbles.", "Don't use gradient text, glassmorphism, side-stripe card accents, or decorative shadows as a default."]
+  }
+}

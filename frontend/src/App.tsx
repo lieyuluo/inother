@@ -109,11 +109,20 @@ export default function App() {
   }
 
   const clearError = () => setError('')
+  const selectedSession = sessions.find((session) => session.id === selectedSessionId)
 
   return (
     <div className="app">
       <header className="app-header">
-        <h1>Enterprise AI Agent</h1>
+        <div className="brand-block">
+          <span className="brand-kicker">Knowledge Workspace</span>
+          <h1>Enterprise AI Agent</h1>
+        </div>
+        <div className="workspace-summary" aria-label="Workspace summary">
+          <span>{documents.length} docs</span>
+          <span>{sessions.length} sessions</span>
+          <span>{currentUser ? currentUser.role : 'guest'}</span>
+        </div>
         <div className="header-tools">
           <HealthStatus />
           <AuthPanel
@@ -133,7 +142,7 @@ export default function App() {
       )}
 
       <main className="app-main">
-        <aside className="sidebar">
+        <aside className="sidebar" aria-label="Workspace panels">
           <div className="sidebar-section">
             <DocumentUpload
               onUploaded={loadDocuments}
@@ -159,7 +168,17 @@ export default function App() {
           </div>
         </aside>
 
-        <section className="chat-area">
+        <section className="chat-area" aria-label="Conversation workspace">
+          <div className="chat-toolbar">
+            <div>
+              <h2>{selectedSession ? selectedSession.title || 'Untitled session' : 'Conversation'}</h2>
+              <span>{messageList.length} saved messages</span>
+            </div>
+            <span className={selectedSession ? 'workspace-state active' : 'workspace-state'}>
+              {selectedSession ? 'Session active' : 'No session selected'}
+            </span>
+          </div>
+
           {selectedSessionId ? (
             <ChatWindow
               sessionId={selectedSessionId}
@@ -181,7 +200,9 @@ export default function App() {
       </main>
 
       {currentUser && currentUser.role === 'admin' && (
-        <AdminDashboard user={currentUser} />
+        <section className="admin-region">
+          <AdminDashboard user={currentUser} />
+        </section>
       )}
     </div>
   )

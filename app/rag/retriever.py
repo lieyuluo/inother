@@ -83,7 +83,7 @@ class Retriever:
             Only returns chunks from documents with status='ready'.
         """
         # Generate query embedding
-        query_embedding = self.embedding_provider.embed(query)
+        query_embedding = await self.embedding_provider.async_embed(query)
 
         if self._use_pgvector:
             return await self._pgvector_search(query_embedding)
