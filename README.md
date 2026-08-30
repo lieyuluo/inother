@@ -820,14 +820,26 @@ npm run dev
 
 ```bash
 cp .env.example .env
-# 生产模式必须设置强 JWT_SECRET_KEY 和 OPENAI_API_KEY；API 容器会自动执行 alembic upgrade head
+# 设置 URL 安全的强 POSTGRES_PASSWORD、JWT_SECRET_KEY 和模型服务 API Key。
+# 如果要在宿主机直接运行后端，DATABASE_URL 中的数据库密码应与 POSTGRES_PASSWORD 保持一致。
+# API 容器会自动执行 alembic upgrade head。
 docker compose up -d --build
 docker compose ps
 ```
 
 Docker Compose 默认以 `APP_ENV=production` 启动，生产配置会 fail-fast：
 `AUTH_REQUIRED=true`、`JWT_SECRET_KEY` 必须替换为强密钥、`MCP_DEMO_ENABLED=false`、
-LLM planner/reranker 启用时必须配置 `LLM_PROVIDER=openai` 和 `OPENAI_API_KEY`。
+LLM planner/reranker 启用时必须配置 `LLM_PROVIDER=openai` 和模型服务 API Key。
+PostgreSQL、Redis、API 和前端端口默认只绑定到本机回环地址。
+
+容器启动后，可在 API 容器中创建或更新管理员账号：
+
+```bash
+docker compose exec api python scripts/create_admin.py \
+  --email admin@example.com \
+  --username admin \
+  --password 'replace-with-a-strong-admin-password'
+```
 
 ## v1.0 Phase 3: Standard MCP Transport and Tool Policy
 

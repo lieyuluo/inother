@@ -32,7 +32,7 @@ RUN uv sync --no-dev --no-install-project
 COPY app ./app
 COPY alembic ./alembic
 COPY alembic.ini .
-COPY scripts/docker-entrypoint.sh ./scripts/docker-entrypoint.sh
+COPY scripts ./scripts
 
 # Install the project after source files are available
 RUN uv sync --no-dev
